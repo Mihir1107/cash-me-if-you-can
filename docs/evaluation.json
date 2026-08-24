@@ -1,0 +1,187 @@
+{
+  "match_rate_pct": 41.82,
+  "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank",
+  "scoring": {
+    "orders_scored": 55,
+    "exact_label_accuracy": 0.9455,
+    "fault_detection": {
+      "injected_faults": 29,
+      "detected": 29,
+      "false_positives": 3,
+      "missed": 0,
+      "precision": 0.9062,
+      "recall": 1.0
+    },
+    "per_reason_code": {
+      "bank_amount_mismatch": {
+        "support": 2,
+        "predicted": 2,
+        "true_positives": 2,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "bank_credit_delayed": {
+        "support": 5,
+        "predicted": 5,
+        "true_positives": 5,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "credit_unattributed": {
+        "support": 0,
+        "predicted": 3,
+        "true_positives": 0,
+        "false_positives": 3,
+        "false_negatives": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "duplicate_settlement": {
+        "support": 5,
+        "predicted": 5,
+        "true_positives": 5,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "fee_footing_mismatch": {
+        "support": 5,
+        "predicted": 5,
+        "true_positives": 5,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "ledger_gross_amount_mismatch": {
+        "support": 1,
+        "predicted": 1,
+        "true_positives": 1,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "matched": {
+        "support": 26,
+        "predicted": 23,
+        "true_positives": 23,
+        "false_positives": 0,
+        "false_negatives": 3,
+        "precision": 1.0,
+        "recall": 0.8846,
+        "f1": 0.9388
+      },
+      "no_settlement_found": {
+        "support": 5,
+        "predicted": 5,
+        "true_positives": 5,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "refund_not_reflected": {
+        "support": 4,
+        "predicted": 4,
+        "true_positives": 4,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "settlement_not_credited": {
+        "support": 2,
+        "predicted": 2,
+        "true_positives": 2,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      }
+    },
+    "confusion_matrix": {
+      "duplicate_settlement": {
+        "duplicate_settlement": 5
+      },
+      "no_settlement_found": {
+        "no_settlement_found": 5
+      },
+      "fee_footing_mismatch": {
+        "fee_footing_mismatch": 5
+      },
+      "bank_credit_delayed": {
+        "bank_credit_delayed": 5
+      },
+      "matched": {
+        "matched": 23,
+        "credit_unattributed": 3
+      },
+      "bank_amount_mismatch": {
+        "bank_amount_mismatch": 2
+      },
+      "refund_not_reflected": {
+        "refund_not_reflected": 4
+      },
+      "ledger_gross_amount_mismatch": {
+        "ledger_gross_amount_mismatch": 1
+      },
+      "settlement_not_credited": {
+        "settlement_not_credited": 2
+      }
+    },
+    "misclassified": [
+      {
+        "order_id": "order_000009",
+        "expected": "matched",
+        "predicted": "credit_unattributed"
+      },
+      {
+        "order_id": "order_000023",
+        "expected": "matched",
+        "predicted": "credit_unattributed"
+      },
+      {
+        "order_id": "order_000033",
+        "expected": "matched",
+        "predicted": "credit_unattributed"
+      }
+    ]
+  },
+  "tier_ablation": [
+    {
+      "config": "regex only",
+      "match_rate_pct": 32.73,
+      "reconciled_orders": 18,
+      "resolved_by_fuzzy": 0,
+      "resolved_by_llm": 0,
+      "unresolved_narrations": 8
+    },
+    {
+      "config": "+ fuzzy (still no LLM call)",
+      "match_rate_pct": 41.82,
+      "reconciled_orders": 23,
+      "resolved_by_fuzzy": 5,
+      "resolved_by_llm": 0,
+      "unresolved_narrations": 3
+    },
+    {
+      "config": "+ LLM tier",
+      "skipped": "no OPENAI_API_KEY set"
+    }
+  ]
+}

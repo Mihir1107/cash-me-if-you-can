@@ -1,0 +1,441 @@
+{
+  "total_orders": 55,
+  "reconciled_orders": 23,
+  "unreconciled_orders": 32,
+  "match_rate_pct": 41.82,
+  "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank",
+  "stages": {
+    "ledger_settlement": {
+      "matched": 35,
+      "exceptions": 20
+    },
+    "settlement_bank": {
+      "matched": 38,
+      "exceptions": 12
+    }
+  },
+  "narration_resolution": {
+    "resolved_by_fuzzy_no_llm": 5,
+    "resolved_by_llm": 0,
+    "unresolved": 3
+  },
+  "money": {
+    "total_exposure": 635548.23,
+    "confirmed_value": 255896.12,
+    "at_risk_value": 379652.11,
+    "value_match_rate_pct": 40.26,
+    "at_risk_by_reason": {
+      "fee_footing_mismatch": 88397.13,
+      "duplicate_settlement": 75769.24,
+      "no_settlement_found": 64511.08,
+      "bank_credit_delayed": 52592.63,
+      "credit_unattributed": 43868.63,
+      "refund_not_reflected": 41518.23,
+      "settlement_not_credited": 6201.64,
+      "ledger_gross_amount_mismatch": 3474.27,
+      "bank_amount_mismatch": 3319.26
+    },
+    "unattributed_bank_credit_value": 43868.63,
+    "identity": {
+      "holds": true,
+      "residual": 0.0,
+      "statement": "total_exposure == confirmed_value + at_risk_value"
+    },
+    "exposure_note": "exposure = settled_amount where a settlement exists, else the ledger amount (booked revenue with no payout)"
+  },
+  "throughput": {
+    "wall_clock_ms": 10.66,
+    "orders": 55,
+    "bank_rows": 47,
+    "records_processed": 102,
+    "records_per_second": 9568.5,
+    "llm_calls": 0,
+    "llm_calls_per_100_orders": 0.0,
+    "stage_ms": {
+      "load_sources": 1.19,
+      "stage_a_ledger_settlement": 1.53,
+      "tier1_narration_regex": 0.78,
+      "tier2_narration_fuzzy": 0.42,
+      "tier3_narration_llm": 0.01,
+      "stage_b_settlement_bank": 2.57
+    }
+  },
+  "bank_source_error": null,
+  "exception_count": 32,
+  "exception_reason_counts": {
+    "duplicate_settlement": 5,
+    "no_settlement_found": 5,
+    "fee_footing_mismatch": 5,
+    "refund_not_reflected": 4,
+    "ledger_gross_amount_mismatch": 1,
+    "bank_credit_delayed": 5,
+    "bank_amount_mismatch": 2,
+    "credit_unattributed": 3,
+    "settlement_not_credited": 2
+  },
+  "exceptions": [
+    {
+      "order_id": "order_000001",
+      "stage": "ledger_settlement",
+      "reason_code": "duplicate_settlement",
+      "basis": "2 settlement rows found for one order_id",
+      "detail": {
+        "settlement_ids": [
+          "stl_000001",
+          "stl_000002"
+        ]
+      }
+    },
+    {
+      "order_id": "order_000002",
+      "stage": "ledger_settlement",
+      "reason_code": "no_settlement_found",
+      "basis": "no settlement row exists for this order_id",
+      "detail": {}
+    },
+    {
+      "order_id": "order_000003",
+      "stage": "ledger_settlement",
+      "reason_code": "fee_footing_mismatch",
+      "basis": "gross-fee-tax-refund=5827.8 vs actual_settled=5799.12",
+      "detail": {
+        "fee": 119.37,
+        "tax": 21.49,
+        "refund_amount": 0.0
+      }
+    },
+    {
+      "order_id": "order_000012",
+      "stage": "ledger_settlement",
+      "reason_code": "refund_not_reflected",
+      "basis": "settlement nets a refund of 5727.23 but ledger still books 19090.78 with status='paid'",
+      "detail": {
+        "refund_amount": 5727.23,
+        "ledger_amount": 19090.78
+      }
+    },
+    {
+      "order_id": "order_000013",
+      "stage": "ledger_settlement",
+      "reason_code": "duplicate_settlement",
+      "basis": "2 settlement rows found for one order_id",
+      "detail": {
+        "settlement_ids": [
+          "stl_000013",
+          "stl_000014"
+        ]
+      }
+    },
+    {
+      "order_id": "order_000014",
+      "stage": "ledger_settlement",
+      "reason_code": "no_settlement_found",
+      "basis": "no settlement row exists for this order_id",
+      "detail": {}
+    },
+    {
+      "order_id": "order_000015",
+      "stage": "ledger_settlement",
+      "reason_code": "fee_footing_mismatch",
+      "basis": "gross-fee-tax-refund=23386.46 vs actual_settled=23377.88",
+      "detail": {
+        "fee": 479.03,
+        "tax": 86.23,
+        "refund_amount": 0.0
+      }
+    },
+    {
+      "order_id": "order_000020",
+      "stage": "ledger_settlement",
+      "reason_code": "ledger_gross_amount_mismatch",
+      "basis": "ledger=4308.24 vs settlement_gross=3558.24",
+      "detail": {}
+    },
+    {
+      "order_id": "order_000024",
+      "stage": "ledger_settlement",
+      "reason_code": "refund_not_reflected",
+      "basis": "settlement nets a refund of 4393.54 but ledger still books 14645.13 with status='paid'",
+      "detail": {
+        "refund_amount": 4393.54,
+        "ledger_amount": 14645.13
+      }
+    },
+    {
+      "order_id": "order_000025",
+      "stage": "ledger_settlement",
+      "reason_code": "duplicate_settlement",
+      "basis": "2 settlement rows found for one order_id",
+      "detail": {
+        "settlement_ids": [
+          "stl_000025",
+          "stl_000026"
+        ]
+      }
+    },
+    {
+      "order_id": "order_000026",
+      "stage": "ledger_settlement",
+      "reason_code": "no_settlement_found",
+      "basis": "no settlement row exists for this order_id",
+      "detail": {}
+    },
+    {
+      "order_id": "order_000027",
+      "stage": "ledger_settlement",
+      "reason_code": "fee_footing_mismatch",
+      "basis": "gross-fee-tax-refund=20948.93 vs actual_settled=20930.63",
+      "detail": {
+        "fee": 429.11,
+        "tax": 77.24,
+        "refund_amount": 0.0
+      }
+    },
+    {
+      "order_id": "order_000036",
+      "stage": "ledger_settlement",
+      "reason_code": "refund_not_reflected",
+      "basis": "settlement nets a refund of 5207.99 but ledger still books 17359.97 with status='paid'",
+      "detail": {
+        "refund_amount": 5207.99,
+        "ledger_amount": 17359.97
+      }
+    },
+    {
+      "order_id": "order_000037",
+      "stage": "ledger_settlement",
+      "reason_code": "duplicate_settlement",
+      "basis": "2 settlement rows found for one order_id",
+      "detail": {
+        "settlement_ids": [
+          "stl_000037",
+          "stl_000038"
+        ]
+      }
+    },
+    {
+      "order_id": "order_000038",
+      "stage": "ledger_settlement",
+      "reason_code": "no_settlement_found",
+      "basis": "no settlement row exists for this order_id",
+      "detail": {}
+    },
+    {
+      "order_id": "order_000039",
+      "stage": "ledger_settlement",
+      "reason_code": "fee_footing_mismatch",
+      "basis": "gross-fee-tax-refund=19746.35 vs actual_settled=19731.98",
+      "detail": {
+        "fee": 404.47,
+        "tax": 72.8,
+        "refund_amount": 0.0
+      }
+    },
+    {
+      "order_id": "order_000048",
+      "stage": "ledger_settlement",
+      "reason_code": "refund_not_reflected",
+      "basis": "settlement nets a refund of 3085.59 but ledger still books 10285.31 with status='paid'",
+      "detail": {
+        "refund_amount": 3085.59,
+        "ledger_amount": 10285.31
+      }
+    },
+    {
+      "order_id": "order_000049",
+      "stage": "ledger_settlement",
+      "reason_code": "duplicate_settlement",
+      "basis": "2 settlement rows found for one order_id",
+      "detail": {
+        "settlement_ids": [
+          "stl_000049",
+          "stl_000050"
+        ]
+      }
+    },
+    {
+      "order_id": "order_000050",
+      "stage": "ledger_settlement",
+      "reason_code": "no_settlement_found",
+      "basis": "no settlement row exists for this order_id",
+      "detail": {}
+    },
+    {
+      "order_id": "order_000051",
+      "stage": "ledger_settlement",
+      "reason_code": "fee_footing_mismatch",
+      "basis": "gross-fee-tax-refund=18567.87 vs actual_settled=18557.52",
+      "detail": {
+        "fee": 380.33,
+        "tax": 68.46,
+        "refund_amount": 0.0
+      }
+    },
+    {
+      "order_id": "order_000004",
+      "stage": "settlement_bank",
+      "reason_code": "bank_credit_delayed",
+      "basis": "bank credit 8 days after settlement (window=5)",
+      "detail": {
+        "utr": "UTR100004",
+        "date_gap_days": 8
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000008",
+      "stage": "settlement_bank",
+      "reason_code": "bank_amount_mismatch",
+      "basis": "bank credited 872.99 vs settlement total 1122.99 (single settlement)",
+      "detail": {
+        "utr": "UTR100008",
+        "bank_amount": 872.99,
+        "settled_total": 1122.99
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000009",
+      "stage": "settlement_bank",
+      "reason_code": "credit_unattributed",
+      "basis": "settlement UTR UTR100009 has no readable bank credit, but 1 unattributed credit(s) match the expected 17616.68 \u2014 narration unreadable, NOT matched on amount",
+      "detail": {
+        "utr": "UTR100009",
+        "expected_amount": 17616.68,
+        "candidate_txn_ids": [
+          "bnk_000008"
+        ]
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000016",
+      "stage": "settlement_bank",
+      "reason_code": "bank_credit_delayed",
+      "basis": "bank credit 8 days after settlement (window=5)",
+      "detail": {
+        "utr": "UTR100016",
+        "date_gap_days": 8
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000021",
+      "stage": "settlement_bank",
+      "reason_code": "settlement_not_credited",
+      "basis": "settlement UTR UTR100021 has no matching bank credit and no unattributed credit for 2373.24 \u2014 money never arrived",
+      "detail": {
+        "utr": "UTR100021",
+        "expected_amount": 2373.24
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000023",
+      "stage": "settlement_bank",
+      "reason_code": "credit_unattributed",
+      "basis": "settlement UTR UTR100023 has no readable bank credit, but 1 unattributed credit(s) match the expected 21669.8 \u2014 narration unreadable, NOT matched on amount",
+      "detail": {
+        "utr": "UTR100023",
+        "expected_amount": 21669.8,
+        "candidate_txn_ids": [
+          "bnk_000020"
+        ]
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000028",
+      "stage": "settlement_bank",
+      "reason_code": "bank_credit_delayed",
+      "basis": "bank credit 8 days after settlement (window=5)",
+      "detail": {
+        "utr": "UTR100028",
+        "date_gap_days": 8
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000032",
+      "stage": "settlement_bank",
+      "reason_code": "bank_amount_mismatch",
+      "basis": "bank credited 1946.27 vs settlement total 2196.27 (single settlement)",
+      "detail": {
+        "utr": "UTR100032",
+        "bank_amount": 1946.27,
+        "settled_total": 2196.27
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000033",
+      "stage": "settlement_bank",
+      "reason_code": "credit_unattributed",
+      "basis": "settlement UTR UTR100033 has no readable bank credit, but 1 unattributed credit(s) match the expected 4582.15 \u2014 narration unreadable, NOT matched on amount",
+      "detail": {
+        "utr": "UTR100033",
+        "expected_amount": 4582.15,
+        "candidate_txn_ids": [
+          "bnk_000028"
+        ]
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000040",
+      "stage": "settlement_bank",
+      "reason_code": "bank_credit_delayed",
+      "basis": "bank credit 8 days after settlement (window=5)",
+      "detail": {
+        "utr": "UTR100040",
+        "date_gap_days": 8
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000045",
+      "stage": "settlement_bank",
+      "reason_code": "settlement_not_credited",
+      "basis": "settlement UTR UTR100045 has no matching bank credit and no unattributed credit for 3828.4 \u2014 money never arrived",
+      "detail": {
+        "utr": "UTR100045",
+        "expected_amount": 3828.4
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000052",
+      "stage": "settlement_bank",
+      "reason_code": "bank_credit_delayed",
+      "basis": "bank credit 8 days after settlement (window=5)",
+      "detail": {
+        "utr": "UTR100052",
+        "date_gap_days": 8
+      },
+      "also_matched_in_stage_a": true
+    }
+  ],
+  "unattributed_bank_credits": [
+    {
+      "txn_id": "bnk_000028",
+      "amount": 4582.15,
+      "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100033",
+      "reason_code": "narration_unresolved",
+      "basis": "LLM unavailable \u2014 no OPENAI_API_KEY set, routed to exception"
+    },
+    {
+      "txn_id": "bnk_000020",
+      "amount": 21669.8,
+      "narration": "CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted",
+      "reason_code": "narration_unresolved",
+      "basis": "LLM unavailable \u2014 no OPENAI_API_KEY set, routed to exception"
+    },
+    {
+      "txn_id": "bnk_000008",
+      "amount": 17616.68,
+      "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100009",
+      "reason_code": "narration_unresolved",
+      "basis": "LLM unavailable \u2014 no OPENAI_API_KEY set, routed to exception"
+    }
+  ]
+}
