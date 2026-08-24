@@ -26,6 +26,7 @@ from src.matcher import (
 from src.fuzzy_resolver import resolve_unresolved_bank_rows as fuzzy_resolve
 from src.llm_resolver import resolve_unresolved_bank_rows as llm_resolve
 from src.audit import AuditTrail
+from src.money import build_exposure_index
 from src.report import build_report, print_summary, save_report
 
 REQUIRED_COLUMNS = {
@@ -205,6 +206,7 @@ def run_reconciliation(data_dir="data", output_dir="output",
         llm_links=llm_links,
         llm_exceptions=llm_exceptions,
         bank_error=bank_error,
+        exposure_index=build_exposure_index(ledger, settlements),
         throughput=_throughput(len(ledger), bank, timings, t_start,
                                llm_calls=sum(1 for r in llm_links + llm_exceptions
                                              if r.get("llm_invoked"))),

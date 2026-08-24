@@ -1,7 +1,10 @@
 """
 Deterministic matcher. Does the easy 70-80% with zero LLM calls:
   Stage A: ledger <-> settlement, keyed on order_id, amount footing checked
-  Stage B: settlement <-> bank, keyed on UTR quoted in the bank narration
+  Stage B: settlement <-> bank, keyed on the payment reference quoted in the
+           bank narration -- matched by normalised substring against references
+           we already hold, never by a format-specific regex, so it is not tied
+           to any one bank's narration conventions (see tests/test_generalize.py)
 
 Stage B is settlement-driven, not bank-driven: it walks the settlements and
 gives every one a verdict, so "Razorpay says it paid out and nothing ever hit
@@ -19,8 +22,6 @@ from datetime import datetime
 
 AMOUNT_TOLERANCE = 1.0  # paise-level rounding tolerance, in rupees
 BANK_DATE_WINDOW_DAYS = 5  # settlement_date .. settlement_date + N is "normal"
-
-UTR_RE = re.compile(r"UTR[:\-]?\s*([A-Z0-9]{6,})", re.IGNORECASE)
 
 # Ledger statuses that show the merchant knows a refund happened.
 REFUND_AWARE_STATUSES = {"refunded", "partially_refunded", "refund_processed"}
@@ -162,6 +163,22 @@ def match_ledger_to_settlement(ledger_df, settlement_df):
 
         expected_settled = round(gross - fee - tax - refund, 2)
         actual_settled = round(actual, 2)
+
+        # Fees and tax cannot exceed the transaction they are charged on. Such a
+        # settlement foots perfectly -- gross - fee - tax really does equal the
+        # negative settled_amount -- so every arithmetic check passes it, and it
+        # reaches the bank stage looking valid. It is still nonsense: a processor
+        # does not charge more to process a sale than the sale was worth.
+        # Found by the property suite, not by a case I thought to write.
+        if fee + tax > gross + AMOUNT_TOLERANCE:
+            results.append(MatchResult(
+                order_id=oid, stage="ledger_settlement", status="exception",
+                reason_code="fee_exceeds_gross",
+                basis=(f"fee {fee} + tax {tax} exceed gross {gross} — "
+                       f"settlement nets {actual_settled}"),
+                detail={"fee": fee, "tax": tax, "gross_amount": gross},
+            ))
+            continue
 
         # The ledger may legitimately carry gross (refund not yet booked) or net
         # (refund booked). Anything else is a genuine amount disagreement.

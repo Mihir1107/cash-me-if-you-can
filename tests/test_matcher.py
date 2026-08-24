@@ -366,3 +366,24 @@ def test_bank_credit_predating_the_settlement_is_flagged():
     # a same-day credit is still fine
     same_day, _ = match_settlement_to_bank(stl_df, pd.DataFrame([bank(date="2026-08-20")]))
     assert same_day[0].status == "matched"
+
+
+def test_fees_exceeding_gross_are_flagged_even_though_the_footing_is_correct():
+    """
+    gross - fee - tax genuinely equals the negative settled_amount, so every
+    arithmetic check in Stage A passes. It is still not a valid settlement.
+    Found by the property suite rather than by hand.
+    """
+    results, settled_ids = match_ledger_to_settlement(
+        pd.DataFrame([ledger(amount=1000.0)]),
+        pd.DataFrame([settlement(gross=1000.0, fee=990.0, tax=178.2,
+                                 settled=-168.2)]))
+    assert results[0].reason_code == "fee_exceeds_gross"
+    assert settled_ids == set()
+
+
+def test_a_normal_fee_is_not_flagged_as_excessive():
+    """Control: the rule must catch nonsense, not ordinary fees."""
+    results, _ = match_ledger_to_settlement(
+        pd.DataFrame([ledger()]), pd.DataFrame([settlement()]))
+    assert results[0].status == "matched"

@@ -11,10 +11,12 @@ measuring anything.
 
 import json
 
+from src.money import build_money_report
+
 
 def build_report(total_orders, stage_a_results, stage_b_results,
                  fuzzy_links, llm_links, llm_exceptions, bank_error=None,
-                 throughput=None):
+                 throughput=None, exposure_index=None):
     matched_a = {r.order_id for r in stage_a_results if r.status == "matched"}
     exceptions_a = [r for r in stage_a_results if r.status == "exception"]
 
@@ -63,6 +65,13 @@ def build_report(total_orders, stage_a_results, stage_b_results,
     for e in exception_list:
         reason_counts[e["reason_code"]] = reason_counts.get(e["reason_code"], 0) + 1
 
+    # Order counts answer "how many broke". Money answers "how much is at
+    # stake", which is the question a controller actually asks.
+    money = None
+    if exposure_index is not None:
+        money = build_money_report(exposure_index, reconciled, exception_list,
+                                   unattributed)
+
     return {
         "total_orders": total_orders,
         "reconciled_orders": len(reconciled),
@@ -84,6 +93,7 @@ def build_report(total_orders, stage_a_results, stage_b_results,
             "resolved_by_llm": len(llm_links),
             "unresolved": len(llm_exceptions),
         },
+        "money": money or {},
         "throughput": throughput or {},
         "bank_source_error": bank_error,
         "exception_count": len(exception_list),
@@ -133,6 +143,28 @@ def print_summary(report):
           f"confirmed on BOTH legs)")
     print(f"UNRECONCILED ORDERS: {report['unreconciled_orders']}")
     print(f"EXCEPTION RECORDS:   {report['exception_count']}")
+
+    money = report.get("money") or {}
+    if money:
+        print("-" * 62)
+        print("MONEY RECONCILED (what a controller actually asks)")
+        print(f"  Total exposure:        {money['total_exposure']:>16,.2f}")
+        print(f"  Confirmed in bank:     {money['confirmed_value']:>16,.2f}  "
+              f"({money['value_match_rate_pct']}% by value)")
+        print(f"  AT RISK:               {money['at_risk_value']:>16,.2f}")
+        for reason, value in money["at_risk_by_reason"].items():
+            print(f"    {reason:<32}{value:>14,.2f}")
+        if money["unattributed_bank_credit_value"]:
+            print(f"  Unattributed credits:  "
+                  f"{money['unattributed_bank_credit_value']:>16,.2f}  "
+                  f"(cash held, not placeable)")
+        identity = money["identity"]
+        if identity["holds"]:
+            print(f"  [OK] {identity['statement']}  (residual "
+                  f"{identity['residual']:.2f})")
+        else:
+            print(f"  [!!] IDENTITY BROKEN: {identity['statement']} — residual "
+                  f"{identity['residual']:.2f}. Report cannot be trusted.")
     print("=" * 62)
 
     print("\nException breakdown (reason_code : count):")

@@ -1,3 +1,4 @@
 pandas>=2.0
 openai>=3.0        # responses.parse + strict structured outputs
 pytest>=8.0
+hypothesis>=6.0   # property-based invariant tests

@@ -67,6 +67,55 @@ It is not the ceiling:
 Zero missed faults at every scale. Reproduce with `N_ORDERS` in
 `data/generate_synthetic.py`.
 
+## Money, not just order counts
+
+A match rate counts orders. A finance controller does not ask how many orders
+failed — they ask **how many rupees are unaccounted for, and which bucket each
+one is in.** Those numbers come apart:
+
+```
+MONEY RECONCILED
+  Total exposure:              635,548.23
+  Confirmed in bank:           255,896.12   (40.26% by value)
+  AT RISK:                     379,652.11
+    fee_footing_mismatch                 88,397.13
+    duplicate_settlement                 75,769.24
+    no_settlement_found                  64,511.08
+    bank_credit_delayed                  52,592.63
+    credit_unattributed                  43,868.63
+    refund_not_reflected                 41,518.23
+    settlement_not_credited               6,201.64
+    ledger_gross_amount_mismatch          3,474.27
+    bank_amount_mismatch                  3,319.26
+  [OK] total_exposure == confirmed_value + at_risk_value  (residual 0.00)
+```
+
+**Ranking by count and ranking by value disagree**, which matters operationally.
+`credit_unattributed` is 6th by count and 5th by value: one order worth ₹43,869.
+`settlement_not_credited` is two orders worth ₹6,202 between them. A controller
+working the queue by count clears two ₹3k problems before touching a ₹44k one.
+The count view cannot tell you that.
+
+### The identity
+
+Every rupee of exposure lands in exactly one bucket, and that is enforced, not
+summarised:
+
+```
+total_exposure == confirmed_value + at_risk_value
+```
+
+Exposure is `settled_amount` where a settlement exists, and the ledger amount
+where none does — revenue booked with no payout is exactly the amount at stake.
+If the identity ever fails, the report is not imprecise, it is **lying about
+where money went**, so the residual is printed and flagged rather than swallowed.
+A tool that cannot account for its own arithmetic has no business reporting
+anyone else's.
+
+Unattributed bank credits are tracked separately and deliberately *not* netted
+against exposure. Cash we hold but cannot place is a different problem from cash
+we are owed but cannot find; netting them would hide both.
+
 ## Measured accuracy, not just throughput
 
 `data/generate_synthetic.py` records what *should* happen to every order at
@@ -166,6 +215,63 @@ crash, or a wrong reason code. That one was silent, and it produced the exact
 outcome this entire design exists to prevent: **a match nobody verified.** It
 had been in the code since the first version, under 60 passing tests, and only
 an adversarial case found it.
+
+## Property-based testing
+
+`tests/test_properties.py` uses [hypothesis](https://hypothesis.works/) to
+generate whole three-source batches — arbitrary amounts, fees, dates, duplicate
+settlements, orphans, missing bank rows — and asserts invariants that must hold
+for **every** batch, not just ones I thought to write:
+
+| Invariant | Meaning |
+|---|---|
+| every order gets exactly one verdict | nothing vanishes between stages |
+| `reconciled + unreconciled == total` | the count balances |
+| `exposure == confirmed + at_risk` | the money balances |
+| a match always has bank confirmation | **nothing is ever invented** |
+| same input ⇒ same output | a finance control that drifts is worthless |
+
+The fourth is the reason the file exists. It states the property the whole
+architecture is built to guarantee, over arbitrary input, rather than over the
+batch I happened to author.
+
+It found a bug on its first run. Hypothesis shrank to a settlement where
+**fees exceeded the transaction value** — `fee 497,662` on `gross 502,782`,
+netting `-84,459`. The footing arithmetic is internally consistent, so every
+check in Stage A passed it and it reached the bank stage looking valid. It is
+still nonsense: a processor does not charge more to handle a sale than the sale
+was worth. Now `fee_exceeds_gross`.
+
+## Generalization: a different bank's conventions
+
+The obvious objection to any single-dataset result is that the matcher was
+tuned to its own fixture. `data/generate_alt_format.py` builds a second batch
+that shares nothing with the first but a CSV schema:
+
+| | primary batch | alt batch |
+|---|---|---|
+| reference format | `UTR100009` | `RRN4471829`, `IMPSP20003`, `AXIS8800011`, `9100039` |
+| fee model | flat 2% | ₹3.00 flat + 1.75% |
+| settlement cadence | T+2 | T+1 |
+| narration style | `RAZORPAY SETTLEMENT UTR:…` | HDFC / ICICI / AXIS templates |
+| order ids | `order_000001` | `INV-2026-00001` |
+
+**No line of `src/` changes to run it.** Same thresholds, same reason codes:
+
+```bash
+python main.py --alt --evaluate
+```
+
+```
+orders 60 | match rate 61.67% | faults 23/23 | missed 0 | false positives 0
+exact reason-code accuracy 100.00%   |   money identity holds
+```
+
+Not one reference in that batch contains the string `UTR`. Extraction works by
+normalised substring against references the pipeline already holds — never by a
+format-specific regex — so a bank's narration conventions are not something it
+can depend on. (The original `UTR_RE` regex was removed once it became dead
+code; keeping it would have implied a coupling the matcher does not have.)
 
 ## Where the AI is, and where it deliberately isn't
 
@@ -289,7 +395,8 @@ pip install -r requirements.txt
 python data/generate_synthetic.py    # regenerate the 4 source files (seeded, reproducible)
 python main.py                       # reconcile, print the report
 python main.py --evaluate            # ...and score it against ground truth
-python -m pytest tests/ -q           # 91 tests, incl. 29 adversarial
+python main.py --alt --evaluate      # ...on a different bank's conventions
+python -m pytest tests/ -q           # 103 tests
 ```
 
 Set `OPENAI_API_KEY` to enable Tier 3. Without it the pipeline still runs
@@ -297,7 +404,7 @@ end to end and reports those rows honestly as exceptions.
 
 ## Output
 
-- `output/reconciliation_report.json` — match rate, per-stage counts, throughput, full exception list
+- `output/reconciliation_report.json` — match rate, money reconciliation, per-stage counts, throughput, full exception list
 - `output/evaluation.json` — precision/recall/F1 per reason code, confusion matrix, ablation
 - `output/audit_trail.jsonl` — one line per decision by any stage: timestamp, stage, basis, confidence
 
@@ -320,7 +427,12 @@ src/reconcile.py             orchestrator, tier order, source degradation
 src/evaluate.py              ground-truth scoring + tier ablation
 src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log
-tests/                       91 tests (test_stress.py = 29 adversarial)
+src/money.py                 value reconciliation + the accounting identity
+data/generate_alt_format.py  alt-convention batch for the generalization run
+tests/                       103 tests
+  test_stress.py               29 adversarial cases
+  test_properties.py           invariants over hypothesis-generated batches
+  test_generalize.py           alt-convention regression
 ```
 
 ## Known limits
