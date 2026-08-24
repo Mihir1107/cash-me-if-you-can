@@ -265,34 +265,54 @@ def build_utr_index(known_utrs):
     return by_len
 
 
-def extract_utr_from_narration(narration, known_utrs=None, index=None):
+def scan_non_overlapping(normalized, index):
     """
-    Regex/normalisation tier. Strips the separators banks sprinkle through a
-    narration, then looks for a UTR we already know about. It can only ever
-    return a UTR that exists in the settlement data -- it never invents one.
-    Longest-first so a short UTR can't shadow a longer one containing it.
-    """
-    if index is None:
-        index = build_utr_index(known_utrs or ())
+    Find every distinct reference quoted in a narration, longest first, where a
+    reference nested inside a longer one does not count as a second reference.
 
-    normalized = re.sub(r"[^A-Z0-9]", "", str(narration).upper())
+    `index` is {length: {key: value}}. Values are returned in the order their
+    spans were claimed, de-duplicated.
+
+    This is shared with the fuzzy tier deliberately. Both tiers scan a narration
+    for known references, and when the two had their own copies of this loop
+    they drifted: the matcher gained position-claiming and the fuzzy tier did
+    not, so a narration quoting UTR100005 in a book that also held UTR10000 was
+    resolved by one and refused by the other. One implementation, one behaviour.
+    """
     hits = []
     claimed = []  # character spans already accounted for by a longer match
 
-    # Longest first, so a genuine reference claims its span before any shorter
-    # UTR nested inside it can be counted as a second, separate reference.
     for length in sorted(index, reverse=True):
         bucket = index[length]
         for start in range(len(normalized) - length + 1):
-            hit = bucket.get(normalized[start:start + length])
-            if hit is None:
+            found = bucket.get(normalized[start:start + length])
+            if found is None:
                 continue
             end = start + length
             if any(start < c_end and c_start < end for c_start, c_end in claimed):
                 continue  # sits inside a reference we already read
             claimed.append((start, end))
-            if hit not in hits:
-                hits.append(hit)
+            for value in (found if isinstance(found, list) else [found]):
+                if value not in hits:
+                    hits.append(value)
+    return hits
+
+
+def normalize_reference_text(text):
+    """Strip the separators banks sprinkle through a narration."""
+    return re.sub(r"[^A-Z0-9]", "", str(text).upper())
+
+
+def extract_utr_from_narration(narration, known_utrs=None, index=None):
+    """
+    Regex/normalisation tier. Strips the separators banks sprinkle through a
+    narration, then looks for a UTR we already know about. It can only ever
+    return a UTR that exists in the settlement data -- it never invents one.
+    """
+    if index is None:
+        index = build_utr_index(known_utrs or ())
+
+    hits = scan_non_overlapping(normalize_reference_text(narration), index)
 
     # A narration quoting two known UTRs -- "reversal of X, credit for Y" -- is
     # ambiguous, and taking whichever appears first would confidently pick the

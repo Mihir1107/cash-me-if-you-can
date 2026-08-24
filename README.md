@@ -11,7 +11,7 @@ queue saying who fixes what.
 pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 146 tests
+python -m pytest tests/ -q       # 149 tests
 ```
 
 Set `OPENAI_API_KEY` to enable the LLM tier. Without it the pipeline still runs
@@ -218,7 +218,7 @@ exact reason-code accuracy 100.00% | money identity holds
 
 ## How it is tested
 
-146 tests at 98% line coverage, four kinds:
+149 tests at 98% line coverage, four kinds:
 
 - **`test_stress.py`**, 29 adversarial cases written to break the pipeline. The
   bar for each: do not crash, do not silently invent a match.
@@ -283,7 +283,7 @@ src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log, one run_id per run
 data/generate_synthetic.py   primary batch + ground_truth.csv answer key
 data/generate_alt_format.py  alt-convention batch
-tests/                       146 tests, 98% line coverage
+tests/                       149 tests, 98% line coverage
 ```
 
 Outputs land in `output/`: the report, the evaluation, and `audit_trail.jsonl`,

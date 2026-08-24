@@ -18,6 +18,8 @@ compared against. matcher.py still does the amount and date verification.
 import re
 from difflib import SequenceMatcher
 
+from src.matcher import normalize_reference_text, scan_non_overlapping
+
 # A recovered reference must be this close to a known UTR to count.
 SIMILARITY_THRESHOLD = 0.85
 # Confidence assigned when the UTR's digits are quoted verbatim in the narration.
@@ -27,7 +29,7 @@ MIN_CORE_LEN = 5
 
 
 def _normalize(text):
-    return re.sub(r"[^A-Z0-9]", "", str(text).upper())
+    return normalize_reference_text(text)
 
 
 def _numeric_core(utr):
@@ -56,14 +58,15 @@ def build_core_index(known_utrs):
 
 
 def _core_hits(normalized, index):
-    """Every known UTR whose numeric core is quoted verbatim in the narration."""
-    hits = []
-    for length, bucket in index.items():
-        for start in range(len(normalized) - length + 1):
-            found = bucket.get(normalized[start:start + length])
-            if found:
-                hits.extend(found)
-    return list(dict.fromkeys(hits))  # de-duplicated, order preserved
+    """
+    Every known UTR whose numeric core is quoted verbatim in the narration.
+
+    Shares the matcher's scan, so a shorter core nested inside a longer one is
+    not counted as a competing reference. Without that, a narration quoting
+    100005 in a book that also held a UTR with core 10000 looked ambiguous and
+    was refused, even though a person reading it would not hesitate.
+    """
+    return scan_non_overlapping(normalized, index)
 
 
 def fuzzy_resolve_narration(narration, known_utrs, core_index=None):

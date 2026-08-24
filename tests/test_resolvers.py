@@ -252,3 +252,43 @@ def test_fuzzy_never_proposes_across_a_length_gap():
     """The prefilter must not be doing the matching by accident."""
     known = {"UTR100005"}
     assert fuzzy_resolve_narration("REF 1 CR", known) is None
+
+
+# ---------------------------- the two tiers must not disagree with each other
+
+@pytest.mark.parametrize("narration,expected", [
+    ("PAYOUT UTR100005 CR", "UTR100005"),          # exact, both tiers
+    ("NEFT-RZPY-100005/settlemnt", "UTR100005"),   # prefix dropped, fuzzy only
+])
+def test_a_nested_shorter_reference_is_not_a_competing_reference(narration, expected):
+    """
+    A book holding both UTR100005 and UTR10000 contains one nested inside the
+    other. A narration quoting the longer one is not ambiguous, and neither tier
+    may treat it as such.
+
+    The matcher and the fuzzy tier once had their own copies of this scan and
+    drifted: the matcher gained position-claiming, the fuzzy tier did not, and
+    the same narration was resolved by one and refused by the other. They share
+    one implementation now, and this pins that they agree.
+    """
+    from src.matcher import extract_utr_from_narration
+
+    known = {"UTR100005", "UTR10000"}
+    fuzzy = fuzzy_resolve_narration(narration, known)
+    regex = extract_utr_from_narration(narration, known)
+
+    assert fuzzy is not None
+    assert fuzzy["utr_candidate"] == expected
+    # where the regex tier has an opinion at all, it must be the same opinion
+    assert regex in (None, expected)
+
+
+def test_a_genuine_tie_is_still_refused_by_both_tiers():
+    """Control: sharing the scan must not have bought resolution with safety."""
+    from src.matcher import extract_utr_from_narration
+
+    known = {"UTR100005", "UTR100006"}
+    ambiguous = "PAYOUT REF 100005 AND REF 100006"
+
+    assert fuzzy_resolve_narration(ambiguous, known) is None
+    assert extract_utr_from_narration("CR REF UTR100005 / RVSL UTR100006", known) is None
