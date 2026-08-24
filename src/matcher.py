@@ -38,7 +38,33 @@ class MatchResult:
 
 
 def _parse_date(s):
-    return datetime.strptime(s, "%Y-%m-%d")
+    """Returns None rather than raising. A date we cannot read is an exception
+    for that row, never a reason to abort the batch."""
+    try:
+        return datetime.strptime(str(s).strip(), "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+
+
+def _num(row, name):
+    """
+    Strict numeric read: returns None for missing, blank, NaN or non-numeric.
+
+    This exists because NaN silently defeats every comparison in this file --
+    `abs(nan - x) > tolerance` is False, so a blank amount passed every check
+    and came out MATCHED. A value we cannot read is never evidence of agreement.
+    """
+    try:
+        value = row[name]
+    except (KeyError, IndexError):
+        return None
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if number != number else number  # NaN
 
 
 def _field(row, name, default=0.0):
@@ -76,8 +102,24 @@ def match_ledger_to_settlement(ledger_df, settlement_df):
     for _, row in settlement_df.iterrows():
         settlement_by_order.setdefault(row["order_id"], []).append(row)
 
-    for _, led in ledger_df.iterrows():
-        oid = led["order_id"]
+    # One verdict per distinct order_id. A merchant whose export lists the same
+    # order twice has a double-booking problem of its own, and collapsing the
+    # rows here keeps "orders reconciled + orders excepted == orders" true.
+    ledger_by_order = {}
+    for _, row in ledger_df.iterrows():
+        ledger_by_order.setdefault(row["order_id"], []).append(row)
+
+    for oid, ledger_rows in ledger_by_order.items():
+        if len(ledger_rows) > 1:
+            results.append(MatchResult(
+                order_id=oid, stage="ledger_settlement", status="exception",
+                reason_code="duplicate_ledger_entry",
+                basis=f"{len(ledger_rows)} ledger rows book the same order_id",
+                detail={"ledger_ids": [str(r["ledger_id"]) for r in ledger_rows]},
+            ))
+            continue
+
+        led = ledger_rows[0]
         candidates = settlement_by_order.get(oid, [])
 
         if not candidates:
@@ -98,11 +140,28 @@ def match_ledger_to_settlement(ledger_df, settlement_df):
             continue
 
         stl = candidates[0]
-        gross = float(stl["gross_amount"])
-        refund = float(_field(stl, "refund_amount", 0.0))
-        expected_settled = round(gross - float(stl["fee"]) - float(stl["tax"]) - refund, 2)
-        actual_settled = round(float(stl["settled_amount"]), 2)
-        ledger_amount = float(led["amount"])
+        gross = _num(stl, "gross_amount")
+        fee = _num(stl, "fee")
+        tax = _num(stl, "tax")
+        actual = _num(stl, "settled_amount")
+        ledger_amount = _num(led, "amount")
+        refund = _num(stl, "refund_amount") or 0.0
+
+        missing = [name for name, value in (
+            ("ledger.amount", ledger_amount), ("gross_amount", gross),
+            ("fee", fee), ("tax", tax), ("settled_amount", actual),
+        ) if value is None]
+        if missing:
+            results.append(MatchResult(
+                order_id=oid, stage="ledger_settlement", status="exception",
+                reason_code="source_value_missing",
+                basis=f"cannot verify: missing or non-numeric {', '.join(missing)}",
+                detail={"missing_fields": missing},
+            ))
+            continue
+
+        expected_settled = round(gross - fee - tax - refund, 2)
+        actual_settled = round(actual, 2)
 
         # The ledger may legitimately carry gross (refund not yet booked) or net
         # (refund booked). Anything else is a genuine amount disagreement.
@@ -220,9 +279,18 @@ def link_bank_rows(bank_df, known_utrs, extra_links=None):
     extra_links = extra_links or {}
     by_utr = {}
     unresolved = []
+    non_credits = []
     index = build_utr_index(known_utrs)  # built once, not once per bank row
 
     for _, bank_row in bank_df.iterrows():
+        # A real statement carries debits too. A chargeback or reversal can
+        # quote the very UTR of the settlement it is clawing back -- money
+        # leaving must never be read as money arriving.
+        kind = str(_field(bank_row, "type", "credit")).strip().lower()
+        if kind and not kind.startswith("credit"):
+            non_credits.append(bank_row)
+            continue
+
         utr = extract_utr_from_narration(bank_row["narration"], index=index)
         if utr is None:
             proposed = extra_links.get(bank_row["txn_id"])
@@ -233,7 +301,7 @@ def link_bank_rows(bank_df, known_utrs, extra_links=None):
         else:
             by_utr.setdefault(utr, []).append(bank_row)
 
-    return by_utr, unresolved
+    return by_utr, unresolved, non_credits
 
 
 def tolerance_for(legs):
@@ -249,7 +317,8 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
     results = []
 
     known_utrs = {row["utr"] for _, row in settlement_df.iterrows()}
-    bank_by_utr, unresolved = link_bank_rows(bank_df, known_utrs, extra_links)
+    bank_by_utr, unresolved, _non_credits = link_bank_rows(
+        bank_df, known_utrs, extra_links)
 
     # Razorpay pays out a batch of settlements under one UTR; group accordingly.
     batches = {}
@@ -268,7 +337,18 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
         has_duplicates = len(legs) < len(batch)
 
         order_ids = list(legs_by_order.keys())
-        expected = round(sum(float(row["settled_amount"]) for row in legs), 2)
+        leg_amounts = [_num(row, "settled_amount") for row in legs]
+        if any(a is None for a in leg_amounts):
+            for oid in order_ids:
+                results.append(MatchResult(
+                    order_id=oid, stage="settlement_bank", status="exception",
+                    reason_code="source_value_missing",
+                    basis=f"settlement {utr} has a missing or non-numeric settled_amount",
+                    detail={"utr": utr},
+                ))
+            continue
+
+        expected = round(sum(leg_amounts), 2)
         credits = bank_by_utr.get(utr, [])
 
         if not credits:
@@ -279,7 +359,8 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
             # NEITHER becomes a match. An amount lining up is a triage hint, not
             # evidence, and both stay exceptions.
             candidates = [r for r in unresolved
-                          if abs(float(r["amount"]) - expected) <= tolerance_for(legs)]
+                          if (_num(r, "amount") is not None
+                              and abs(_num(r, "amount") - expected) <= tolerance_for(legs))]
             if candidates:
                 reason = "credit_unattributed"
                 basis = (f"settlement UTR {utr} has no readable bank credit, but "
@@ -300,7 +381,19 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
                 ))
             continue
 
-        actual = round(sum(float(c["amount"]) for c in credits), 2)
+        credit_amounts = [_num(c, "amount") for c in credits]
+        if any(a is None for a in credit_amounts):
+            for oid in order_ids:
+                results.append(MatchResult(
+                    order_id=oid, stage="settlement_bank", status="exception",
+                    reason_code="source_value_missing",
+                    basis=(f"a bank credit for UTR {utr} has a missing or "
+                           f"non-numeric amount — cannot verify"),
+                    detail={"utr": utr},
+                ))
+            continue
+
+        actual = round(sum(credit_amounts), 2)
         tolerance = tolerance_for(legs)
         batch_note = (f"batch of {len(legs)} settlements under one payout"
                       if len(legs) > 1 else "single settlement")
@@ -318,9 +411,37 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
                 ))
             continue
 
-        latest_settlement = max(_parse_date(row["settlement_date"]) for row in legs)
-        latest_credit = max(_parse_date(c["date"]) for c in credits)
+        settlement_dates = [_parse_date(row["settlement_date"]) for row in legs]
+        credit_dates = [_parse_date(c["date"]) for c in credits]
+        if any(d is None for d in settlement_dates + credit_dates):
+            for oid in order_ids:
+                results.append(MatchResult(
+                    order_id=oid, stage="settlement_bank", status="exception",
+                    reason_code="date_unparseable",
+                    basis=(f"UTR {utr}: a settlement or credit date could not be "
+                           f"read, so the settlement window cannot be verified"),
+                    detail={"utr": utr},
+                ))
+            continue
+
+        latest_settlement = max(settlement_dates)
+        latest_credit = max(credit_dates)
         date_gap = (latest_credit - latest_settlement).days
+
+        if date_gap < 0:
+            # The bank cannot pay out a settlement that had not been made yet.
+            # This is a data-integrity problem, not an unusually fast payment,
+            # and it was passing as a match because the window only ever
+            # checked the late side.
+            for oid in order_ids:
+                results.append(MatchResult(
+                    order_id=oid, stage="settlement_bank", status="exception",
+                    reason_code="bank_credit_predates_settlement",
+                    basis=(f"bank credit is {abs(date_gap)} days BEFORE the "
+                           f"settlement date — impossible ordering"),
+                    detail={"utr": utr, "date_gap_days": date_gap},
+                ))
+            continue
 
         if date_gap > BANK_DATE_WINDOW_DAYS:
             for oid in order_ids:

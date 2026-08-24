@@ -149,8 +149,8 @@ def run_reconciliation(data_dir="data", output_dir="output",
         known_utrs = {row["utr"] for _, row in settlements.iterrows()}
 
         # --- Tier 1: deterministic narration parse ---
-        _, unresolved = stage("tier1_narration_regex",
-                              lambda: link_bank_rows(bank, known_utrs))
+        _, unresolved, _ = stage("tier1_narration_regex",
+                                 lambda: link_bank_rows(bank, known_utrs))
 
         # --- Tier 2: deterministic fuzzy recovery, still zero LLM calls ---
         if enable_fuzzy:
@@ -195,7 +195,10 @@ def run_reconciliation(data_dir="data", output_dir="output",
                           "txn_id": e["bank_row"]["txn_id"]})
 
     report = build_report(
-        total_orders=len(ledger),
+        # distinct orders, not ledger rows: a double-booked order is one order
+        # with a problem, and counting it twice would break the report's
+        # reconciled + unreconciled == total invariant
+        total_orders=int(ledger["order_id"].nunique()) if len(ledger) else 0,
         stage_a_results=stage_a_results,
         stage_b_results=stage_b_results,
         fuzzy_links=fuzzy_links,

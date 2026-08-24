@@ -22,6 +22,12 @@ Plus targeted cases placed on otherwise-clean orders:
                           only reading the words decides which is the credit
   UNREADABLE_ORDERS       narration quotes no reference at all -> nothing can
                           resolve this, and it stays an honest exception
+  SHORT_PAID_ORDERS       bank credits less than Razorpay said it settled
+                          -> bank_amount_mismatch
+  LEDGER_MISMATCH_ORDERS  merchant books a different gross than Razorpay
+                          -> ledger_gross_amount_mismatch
+  SPLIT_CREDIT_ORDERS     one settlement arrives as TWO bank credits that sum
+                          to it -> one-to-many, must still match
   NOT_CREDITED_ORDERS     Razorpay settled, money never arrived   -> settlement_not_credited
   REFUND_REFLECTED_ORDERS refund processed AND booked correctly   -> control, must MATCH
   BATCH_GROUPS            N settlements paid out as 1 bank credit -> many-to-one, must match as a batch
@@ -45,6 +51,9 @@ TAX_PCT = 0.18  # GST on fee
 # Targeted cases, placed on order numbers whose modulo class is otherwise clean.
 AMBIGUOUS_REF_ORDERS = {9, 33}
 UNREADABLE_ORDERS = {23}
+SHORT_PAID_ORDERS = {8, 32}
+LEDGER_MISMATCH_ORDERS = {20}
+SPLIT_CREDIT_ORDERS = {10, 34}
 NOT_CREDITED_ORDERS = {21, 45}
 REFUND_REFLECTED_ORDERS = {11, 35}
 BATCH_GROUPS = [[7, 19, 31], [43, 55]]
@@ -149,6 +158,12 @@ def make_dataset():
             expected = "bank_credit_delayed"
             note = "bank credit lands 8 days after settlement, past the window"
 
+        if i in LEDGER_MISMATCH_ORDERS:
+            # the merchant's own system booked the sale at the wrong price
+            ledger_amount = round(amount + 750.0, 2)
+            expected = "ledger_gross_amount_mismatch"
+            note = "merchant ledger books a gross Razorpay never agreed to"
+
         if i in REFUND_REFLECTED_ORDERS:
             # control: same refund shape as case 0, but the ledger DID book it
             refund_amount = round(amount * 0.25, 2)
@@ -159,6 +174,17 @@ def make_dataset():
 
         settlement_date = order_date + timedelta(days=2)
         bank_date = order_date + timedelta(days=bank_date_offset)
+
+        # what the bank actually credited, which is not always what Razorpay
+        # said it settled
+        bank_amount = settled_amount
+        if i in SHORT_PAID_ORDERS:
+            bank_amount = round(settled_amount - 250.0, 2)
+            expected = "bank_amount_mismatch"
+            note = "bank credited less than the settlement reported"
+
+        if i in SPLIT_CREDIT_ORDERS:
+            note = "one settlement arriving as two bank credits that sum to it"
 
         settlement_rows.append({
             "settlement_id": rid("stl", settlement_id_counter),
@@ -214,9 +240,10 @@ def make_dataset():
             "order_num": i,
             "customer": customer,
             "utr": utr,
-            "amount": settled_amount,
+            "amount": bank_amount,
             "date": bank_date,
             "case": case,
+            "split": i in SPLIT_CREDIT_ORDERS,
         })
 
     bank_rows = _emit_bank_rows(pending_bank)
@@ -270,11 +297,29 @@ def _emit_bank_rows(pending_bank):
             # for the ambiguous case we need a second, genuinely-known UTR to
             # quote as the reversal reference -- any settlement but this one
             other = next((u for u in all_utrs if u != utr), utr)
+            narration = _narration(entry, other_utr=other)
+
+            if entry.get("split"):
+                # one-to-many: the bank pays a single settlement out in two
+                # tranches under the same UTR. Neither leg matches the
+                # settlement alone; only their sum does.
+                first = round(entry["amount"] / 2, 2)
+                second = round(entry["amount"] - first, 2)
+                for leg, part in enumerate((first, second), start=1):
+                    rows.append({
+                        "txn_id": rid("bnk", counter),
+                        "date": entry["date"].strftime("%Y-%m-%d"),
+                        "amount": part,
+                        "narration": f"{narration} PART {leg}/2",
+                        "type": "credit",
+                    })
+                    counter += 1
+                continue
             rows.append({
                 "txn_id": rid("bnk", counter),
                 "date": entry["date"].strftime("%Y-%m-%d"),
                 "amount": entry["amount"],
-                "narration": _narration(entry, other_utr=other),
+                "narration": narration,
                 "type": "credit",
             })
         counter += 1

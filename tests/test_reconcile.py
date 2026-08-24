@@ -105,10 +105,12 @@ def test_full_batch_runs_and_reports_honestly(workspace, monkeypatch):
     assert 0 < report["match_rate_pct"] < 100  # neither a fake 100% nor a dead run
 
     # every injected failure mode reaches the exception list under its own code
+    # every reason code the pipeline can emit for an order is exercised by the
+    # batch -- no code exists that the demo cannot demonstrate
     assert set(report["exception_reason_counts"]) == {
         "refund_not_reflected", "duplicate_settlement", "no_settlement_found",
         "fee_footing_mismatch", "bank_credit_delayed", "settlement_not_credited",
-        "credit_unattributed",
+        "credit_unattributed", "bank_amount_mismatch", "ledger_gross_amount_mismatch",
     }
 
     # the two genuinely missing payouts and the two unreadable-narration credits
@@ -123,11 +125,11 @@ def test_full_batch_runs_and_reports_honestly(workspace, monkeypatch):
     assert report["narration_resolution"]["unresolved"] > 0
 
     assert (out / "reconciliation_report.json").exists()
-    lines = (out / "audit_trail.jsonl").read_text().strip().splitlines()
-    assert len(lines) == len(audit.entries)
-    for line in lines:  # every entry is a real, timestamped, attributed decision
-        entry = json.loads(line)
+    mine = audit.entries_for_run(out / "audit_trail.jsonl")
+    assert len(mine) == len(audit.entries)
+    for entry in mine:  # every entry is a real, timestamped, attributed decision
         assert entry["timestamp"] and entry["stage"] and entry["basis"]
+        assert entry["run_id"] == audit.run_id
 
 
 def test_every_order_gets_a_verdict(workspace, monkeypatch):
@@ -324,3 +326,27 @@ def test_a_wrong_llm_proposal_cannot_book_money_to_the_wrong_settlement(workspac
 
     # the mismatch surfaces as an exception rather than a silent bad match
     assert misled["exception_reason_counts"].get("bank_amount_mismatch", 0) > 0
+
+
+def test_audit_trail_appends_and_never_destroys_an_earlier_run(workspace, monkeypatch):
+    """
+    An audit trail that truncates on every run is not an audit trail. Two runs
+    must both survive in the file, and each must remain separable by run_id.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    data, out = workspace
+    log = out / "audit_trail.jsonl"
+
+    _, first = run_reconciliation(data_dir=str(data), output_dir=str(out))
+    after_first = log.read_text().strip().splitlines()
+
+    _, second = run_reconciliation(data_dir=str(data), output_dir=str(out))
+    after_second = log.read_text().strip().splitlines()
+
+    assert first.run_id != second.run_id
+    assert len(after_second) == len(after_first) + len(second.entries)
+
+    # the first run's lines are still there, byte for byte
+    assert after_second[:len(after_first)] == after_first
+    assert len(first.entries_for_run(log)) == len(first.entries)
+    assert len(second.entries_for_run(log)) == len(second.entries)

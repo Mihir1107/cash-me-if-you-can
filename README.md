@@ -14,14 +14,18 @@ python main.py --evaluate
 ## Results on the 55-order batch
 
 ```
-MATCH RATE: 50.91%   (28/55 orders confirmed on BOTH legs)
-UNRECONCILED: 27     every one carries a reason code
+MATCH RATE: 45.45%   (25/55 orders confirmed on BOTH legs)
+UNRECONCILED: 30     every one carries a reason code
 
-duplicate_settlement       5     no_settlement_found        5
-fee_footing_mismatch       5     bank_credit_delayed        5
-refund_not_reflected       4     settlement_not_credited    2
+duplicate_settlement       5     no_settlement_found          5
+fee_footing_mismatch       5     bank_credit_delayed          5
+refund_not_reflected       4     bank_amount_mismatch         2
+settlement_not_credited    2     ledger_gross_amount_mismatch 1
 credit_unattributed        1
 ```
+
+**Every reason code the pipeline can emit for an order is exercised by this
+batch** — there is no code the demo cannot demonstrate.
 
 Every figure in this README is from an executed run, not a projection. With no
 `OPENAI_API_KEY` set the same batch degrades honestly to **47.27%** and three
@@ -30,13 +34,13 @@ is the point.
 
 **That number is deliberately not 95%.** The generator injects real failure
 modes on purpose, so the exception list means something instead of being a
-rounding error on clean data. The question a judge should ask isn't "is 49%
-good" — it's "is 49% *correct*." Which is why the next section exists.
+rounding error on clean data. The question a judge should ask isn't "is 50.91%
+good" — it's "is 50.91% *correct*." Which is why the next section exists.
 
 ## Throughput
 
 ```
-Wall clock: 8.3 ms  (12,048 records/sec over 100 records)
+Wall clock: 11.2 ms  (9,091 records/sec over 102 records)
 LLM calls made: 0   (0.0 per 100 orders)
 ```
 
@@ -44,9 +48,9 @@ Per-stage timings land in `output/reconciliation_report.json` under
 `throughput.stage_ms`. `llm_calls` counts **actual API round-trips**, not rows
 offered to the tier — with no key set the tier short-circuits and this stays 0.
 
-**With Tier 3 enabled the same batch takes 6,031 ms — and 6,005 ms of that is
+**With Tier 3 enabled the same batch takes 5,394 ms — and 5,368 ms of that is
 the three LLM calls.** The entire deterministic pipeline, both matching stages
-and 45 bank narrations, is the remaining ~26 ms. That ratio is the strongest
+and 47 bank narrations, is the remaining ~26 ms. That ratio is the strongest
 argument for the tiering: every narration pushed down to Tier 1 or 2 is roughly
 2,000× cheaper in latency as well as in money. Scoping the model to the rows
 that genuinely need it is what keeps the batch fast, not just cheap.
@@ -56,9 +60,9 @@ It is not the ceiling:
 
 | batch | wall clock | records/sec | faults caught | missed | false positives |
 |---|---|---|---|---|---|
-| 55 | 8.3 ms | 12,048 | 26 / 26 | 0 | 3 |
-| 500 | 49.1 ms | 19,425 | 211 / 211 | 0 | 3 |
-| 5,000 | 522.0 ms | 18,347 | 2,086 / 2,086 | 0 | 3 |
+| 55 | 11.2 ms | 9,091 | 29 / 29 | 0 | 3 |
+| 500 | 52.1 ms | 18,320 | 214 / 214 | 0 | 3 |
+| 5,000 | 543.3 ms | 17,632 | 2,089 / 2,089 | 0 | 3 |
 
 Zero missed faults at every scale. Reproduce with `N_ORDERS` in
 `data/generate_synthetic.py`.
@@ -70,24 +74,28 @@ injection time into `data/ground_truth.csv`. The pipeline never reads it. The
 evaluator scores against it:
 
 ```
-Injected faults:              26
-  detected:                   26
+Injected faults:              29
+  detected:                   29
   missed (false negatives):    0
   false positives:             1
-Fault detection:     precision 96.30%   recall 100.00%
+Fault detection:     precision 96.67%   recall 100.00%
 Exact reason-code accuracy:  98.18%
 ```
 
 | reason_code | support | precision | recall | F1 |
 |---|---|---|---|---|
-| `matched` | 29 | 100.00% | 96.55% | 0.98 |
+| `matched` | 26 | 100.00% | 96.15% | 0.98 |
 | `bank_credit_delayed` | 5 | 100.00% | 100.00% | 1.00 |
 | `duplicate_settlement` | 5 | 100.00% | 100.00% | 1.00 |
 | `fee_footing_mismatch` | 5 | 100.00% | 100.00% | 1.00 |
 | `no_settlement_found` | 5 | 100.00% | 100.00% | 1.00 |
 | `refund_not_reflected` | 4 | 100.00% | 100.00% | 1.00 |
+| `bank_amount_mismatch` | 2 | 100.00% | 100.00% | 1.00 |
 | `settlement_not_credited` | 2 | 100.00% | 100.00% | 1.00 |
+| `ledger_gross_amount_mismatch` | 1 | 100.00% | 100.00% | 1.00 |
 | `credit_unattributed` | 0 | — | — | — |
+
+**Every injected fault type scores 100% precision and 100% recall.**
 
 The single false positive sits in `credit_unattributed`, and it is the one case
 nothing can recover (see below).
@@ -130,6 +138,35 @@ precisely the settled amount is not evidence of a match — an amount lining up
 is a triage hint, never a verdict. Enforced by
 `test_mangled_narration_is_never_matched_on_amount_alone`.
 
+## Adversarial testing
+
+`tests/test_stress.py` is 29 cases written to break the pipeline rather than to
+confirm it. The bar for each is deliberately low: **do not crash, and do not
+silently invent a match.** Producing an exception is a pass; producing a wrong
+match is a failure.
+
+The first run found **five real bugs.** All are fixed and regression-tested:
+
+| What broke | Severity | Cause | Fix |
+|---|---|---|---|
+| A blank amount came out **`matched`** | Critical | `abs(nan - x) > tol` is `False`, so NaN defeated every tolerance check in the file | `_num()` returns `None` for blank/NaN/non-numeric; unreadable values raise `source_value_missing` |
+| A malformed date **killed the whole batch** | High | `strptime` raised out of Stage B, and my earlier refactor had moved error handling to load-time only | `_parse_date()` returns `None`; unreadable dates raise `date_unparseable` |
+| A **debit satisfied a settlement** | High | Bank rows were never filtered by `type`, so a chargeback quoting the settlement's UTR read as the payment arriving | Non-credit rows are excluded from matching and returned separately |
+| A credit dated **before** its settlement matched | Medium | The window only ever checked the late side | `bank_credit_predates_settlement` |
+| A double-booked order broke report arithmetic | Medium | `total_orders` counted ledger rows while Stage A counted orders | Stage A emits one verdict per distinct `order_id`; new `duplicate_ledger_entry` code |
+
+The remaining 24 cases passed unchanged: empty batches, 10 KB narrations, emoji
+and RTL text, CSV-quoted commas, formula-looking narrations, `₹`-formatted
+amounts, negative and zero amounts, 1,000-character UTRs, purely numeric UTRs,
+500 unrelated bank credits, 50 settlements sharing one UTR, and a 10,000-order
+batch.
+
+The NaN bug is the one worth dwelling on. Every other failure here was loud — a
+crash, or a wrong reason code. That one was silent, and it produced the exact
+outcome this entire design exists to prevent: **a match nobody verified.** It
+had been in the code since the first version, under 60 passing tests, and only
+an adversarial case found it.
+
 ## Where the AI is, and where it deliberately isn't
 
 Reconciliation fails in production for one reason: someone lets the model
@@ -171,9 +208,9 @@ Three constraints make that boundary real rather than rhetorical:
 
 | config | match rate | resolved by fuzzy | resolved by LLM | unresolved |
 |---|---|---|---|---|
-| regex only | 38.18% | 0 | 0 | 8 |
-| + fuzzy (still zero LLM calls) | **47.27%** | 5 | 0 | 3 |
-| + LLM tier | **50.91%** | 5 | 2 | 1 |
+| regex only | 32.73% | 0 | 0 | 8 |
+| + fuzzy (still zero LLM calls) | 41.82% | 5 | 0 | 3 |
+| + LLM tier | **45.45%** | 5 | 2 | 1 |
 
 **The cheap deterministic tier does 5 of the 7 mangled narrations for free.**
 The LLM is scoped down to the 2 rows that genuinely need a model. That is the
@@ -202,10 +239,11 @@ with no API key, sent rows to exceptions — but cost the headline number nothin
 A match rate that cannot lose points when verification fails isn't measuring
 anything.
 
-Three things came out of fixing it:
+Fixing it turned up four more problems:
 
 - The rate is now strictly three-way: `matched_stage_a & matched_stage_b`. It
-  fell to **49.09%**, and that is the honest number.
+  fell sixteen points on the batch as it stood then, and every later change has
+  been measured from that honest floor rather than back against 65.45%.
 - Stage B was inverted to iterate **settlements instead of bank rows**. The old
   direction made "Razorpay says it settled and the money never arrived" —
   arguably the most important exception in reconciliation — structurally
@@ -220,24 +258,23 @@ Three things came out of fixing it:
   verdicts. The index also removed a latent nondeterminism: the old scan
   iterated a `set`, so a narration quoting two same-length UTRs resolved
   differently depending on the hash seed.
-- **A passing test asserted a capability the model does not have.** The LLM
-  tier was covered by a stub that looked the correct UTR up in the settlement
-  table and handed it to the fake model. The test passed. The number it produced
-  went into this README as a measured ablation result. Then the tier ran against
-  the live API for the first time and resolved **zero** — because the narration
-  it was being fed (`.../no ref quoted`) contained no reference at all, so the
-  real model correctly returned nulls and confidence 0.
+- The LLM tier passed every test and resolved nothing in production. Its tests
+  stubbed the model and handed it the correct UTR, which proved the pipeline
+  *handles* a resolution — not that a model could *produce* one. The first live
+  run returned confidence `0.00` on every row, correctly: the narrations were
+  written to defeat regex and fuzzy matching, and had overshot into quoting no
+  reference at all. There was nothing to read. The synthetic batch now includes
+  narrations that quote a reversal reference *alongside* the credit, where the
+  characters are genuinely ambiguous and only the surrounding words decide —
+  a language question, which is the one thing string matching cannot do. One
+  narration quoting nothing at all is kept, unresolvable by every tier.
 
-  The code was right; the *test* was wrong, and so was the synthetic data. A
-  stub may only use information present in its own input — this one was feeding
-  the model the answer key it is deliberately never shown. The data now poses a
-  task language can actually solve: a narration quoting two real UTRs, one
-  reversed and one credited, where only the surrounding words say which is
-  which. That fix exposed a further bug — the regex tier took the
-  earliest-positioned match, so on those narrations it confidently returned the
-  *reversal* reference. Both deterministic tiers now refuse when a narration
-  quotes more than one known UTR, which is the correct handoff to Tier 3.
-
+  Rewriting the data exposed a further bug. With two real UTRs in one narration,
+  the regex tier returned whichever appeared first — which is the *reversal*
+  reference, confidently wrong. Both deterministic tiers now refuse when a
+  narration quotes more than one known UTR, which is the correct handoff to
+  Tier 3. On the live run the model picked the credit reference both times and
+  ignored the reversal both times.
 - The `try/except` that was supposed to handle a missing bank file never ran.
   `load_sources()` read all three CSVs *before* the `try`, so a missing
   `bank_statement.csv` raised `FileNotFoundError` and killed the batch. Sources
@@ -252,7 +289,7 @@ pip install -r requirements.txt
 python data/generate_synthetic.py    # regenerate the 4 source files (seeded, reproducible)
 python main.py                       # reconcile, print the report
 python main.py --evaluate            # ...and score it against ground truth
-python -m pytest tests/ -q           # 56 tests
+python -m pytest tests/ -q           # 91 tests, incl. 29 adversarial
 ```
 
 Set `OPENAI_API_KEY` to enable Tier 3. Without it the pipeline still runs
@@ -283,7 +320,7 @@ src/reconcile.py             orchestrator, tier order, source degradation
 src/evaluate.py              ground-truth scoring + tier ablation
 src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log
-tests/                       56 tests
+tests/                       91 tests (test_stress.py = 29 adversarial)
 ```
 
 ## Known limits

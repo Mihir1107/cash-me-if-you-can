@@ -6,9 +6,9 @@ order_000004,bank_credit_delayed,"bank credit lands 8 days after settlement, pas
 order_000005,matched,"clean order, should reconcile on both legs"
 order_000006,matched,"clean order, should reconcile on both legs"
 order_000007,matched,"clean order, should reconcile on both legs"
-order_000008,matched,"clean order, should reconcile on both legs"
+order_000008,bank_amount_mismatch,bank credited less than the settlement reported
 order_000009,matched,"settled and credited correctly, but the narration quotes a reversal ref alongside the credit ref — only the LLM tier can tell which is which"
-order_000010,matched,"clean order, should reconcile on both legs"
+order_000010,matched,one settlement arriving as two bank credits that sum to it
 order_000011,matched,"control: refund processed AND booked correctly, must match"
 order_000012,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
 order_000013,duplicate_settlement,two settlement rows exist for one order_id
@@ -18,7 +18,7 @@ order_000016,bank_credit_delayed,"bank credit lands 8 days after settlement, pas
 order_000017,matched,"clean order, should reconcile on both legs"
 order_000018,matched,"clean order, should reconcile on both legs"
 order_000019,matched,"clean order, should reconcile on both legs"
-order_000020,matched,"clean order, should reconcile on both legs"
+order_000020,ledger_gross_amount_mismatch,merchant ledger books a gross Razorpay never agreed to
 order_000021,settlement_not_credited,Razorpay reports a settlement that never reached the bank
 order_000022,matched,"clean order, should reconcile on both legs"
 order_000023,matched,"settled and credited correctly, but the narration quotes no reference at all — unresolvable by any tier"
@@ -30,9 +30,9 @@ order_000028,bank_credit_delayed,"bank credit lands 8 days after settlement, pas
 order_000029,matched,"clean order, should reconcile on both legs"
 order_000030,matched,"clean order, should reconcile on both legs"
 order_000031,matched,"clean order, should reconcile on both legs"
-order_000032,matched,"clean order, should reconcile on both legs"
+order_000032,bank_amount_mismatch,bank credited less than the settlement reported
 order_000033,matched,"settled and credited correctly, but the narration quotes a reversal ref alongside the credit ref — only the LLM tier can tell which is which"
-order_000034,matched,"clean order, should reconcile on both legs"
+order_000034,matched,one settlement arriving as two bank credits that sum to it
 order_000035,matched,"control: refund processed AND booked correctly, must match"
 order_000036,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
 order_000037,duplicate_settlement,two settlement rows exist for one order_id

@@ -234,12 +234,12 @@ def test_link_only_accepts_proposals_naming_a_real_settlement():
     """
     bank_df = pd.DataFrame([bank(narration="CR/ONLINE TRF/no ref quoted")])
 
-    by_utr, unresolved = link_bank_rows(
+    by_utr, unresolved, _ = link_bank_rows(
         bank_df, {"UTR900001"}, extra_links={"bnk_1": "UTR_DOES_NOT_EXIST"})
     assert by_utr == {}
     assert len(unresolved) == 1
 
-    by_utr, unresolved = link_bank_rows(
+    by_utr, unresolved, _ = link_bank_rows(
         bank_df, {"UTR900001"}, extra_links={"bnk_1": "UTR900001"})
     assert list(by_utr) == ["UTR900001"]
     assert unresolved == []
@@ -313,3 +313,56 @@ def test_shared_numeric_core_stays_ambiguous_after_indexing():
 
 
 
+
+
+def test_one_settlement_split_across_two_bank_credits_matches_on_the_sum():
+    """
+    One-to-many: the bank pays a single settlement out in two tranches under the
+    same UTR. Neither leg matches the settlement alone; only their sum does.
+    """
+    settlements = pd.DataFrame([settlement(settled=1000.0)])
+    credits = pd.DataFrame([
+        bank(txn_id="bnk_1", amount=400.0, narration="RAZORPAY UTR:UTR900001 PART 1/2"),
+        bank(txn_id="bnk_2", amount=600.0, narration="RAZORPAY UTR:UTR900001 PART 2/2"),
+    ])
+    results, _ = match_settlement_to_bank(settlements, credits)
+    assert [r.status for r in results] == ["matched"]
+
+
+def test_a_short_paid_split_still_fails_on_the_sum():
+    """Splitting a payout must not become a way to hide a shortfall."""
+    settlements = pd.DataFrame([settlement(settled=1000.0)])
+    credits = pd.DataFrame([
+        bank(txn_id="bnk_1", amount=400.0, narration="RAZORPAY UTR:UTR900001 PART 1/2"),
+        bank(txn_id="bnk_2", amount=500.0, narration="RAZORPAY UTR:UTR900001 PART 2/2"),
+    ])
+    results, _ = match_settlement_to_bank(settlements, credits)
+    assert codes(results) == ["bank_amount_mismatch"]
+
+
+
+def test_a_debit_quoting_a_settlement_utr_is_never_linked_to_it():
+    """Money leaving must not be read as the settlement arriving."""
+    from src.matcher import link_bank_rows
+
+    debit = pd.DataFrame([bank(narration="CHARGEBACK UTR:UTR900001", txn_id="bnk_d")])
+    debit["type"] = "debit"
+    by_utr, unresolved, non_credits = link_bank_rows(debit, {"UTR900001"})
+    assert by_utr == {}
+    assert unresolved == []
+    assert [r["txn_id"] for r in non_credits] == ["bnk_d"]
+
+
+def test_bank_credit_predating_the_settlement_is_flagged():
+    """
+    Only the late side of the window was ever checked, so a credit dated before
+    the settlement matched cleanly. Money cannot arrive before it was sent.
+    """
+    stl_df = pd.DataFrame([settlement(date="2026-08-20")])
+    results, _ = match_settlement_to_bank(stl_df, pd.DataFrame([bank(date="2026-08-01")]))
+    assert codes(results) == ["bank_credit_predates_settlement"]
+    assert results[0].detail["date_gap_days"] == -19
+
+    # a same-day credit is still fine
+    same_day, _ = match_settlement_to_bank(stl_df, pd.DataFrame([bank(date="2026-08-20")]))
+    assert same_day[0].status == "matched"
