@@ -1,0 +1,24 @@
+# Generated pipeline output — regenerate with `python main.py`
+output/*
+!output/.gitkeep
+
+# Secrets. The pipeline reads ANTHROPIC_API_KEY from the environment only;
+# no key is ever written to a file in this repo.
+.env
+.env.*
+*.pem
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

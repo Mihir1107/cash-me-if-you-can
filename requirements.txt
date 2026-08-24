@@ -1,0 +1,3 @@
+pandas>=2.0
+anthropic>=1.0   # output_config structured outputs require the 1.x SDK
+pytest>=8.0

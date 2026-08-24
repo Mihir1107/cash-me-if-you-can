@@ -1,0 +1,56 @@
+order_id,expected_reason_code,note
+order_000001,duplicate_settlement,two settlement rows exist for one order_id
+order_000002,no_settlement_found,order never settled (stuck/orphan)
+order_000003,fee_footing_mismatch,settled_amount does not foot against gross - fee - tax
+order_000004,bank_credit_delayed,"bank credit lands 8 days after settlement, past the window"
+order_000005,matched,"clean order, should reconcile on both legs"
+order_000006,matched,"clean order, should reconcile on both legs"
+order_000007,matched,"clean order, should reconcile on both legs"
+order_000008,matched,"clean order, should reconcile on both legs"
+order_000009,matched,"settled and credited correctly, but the narration quotes no reference — resolvable only by the LLM tier"
+order_000010,matched,"clean order, should reconcile on both legs"
+order_000011,matched,"control: refund processed AND booked correctly, must match"
+order_000012,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
+order_000013,duplicate_settlement,two settlement rows exist for one order_id
+order_000014,no_settlement_found,order never settled (stuck/orphan)
+order_000015,fee_footing_mismatch,settled_amount does not foot against gross - fee - tax
+order_000016,bank_credit_delayed,"bank credit lands 8 days after settlement, past the window"
+order_000017,matched,"clean order, should reconcile on both legs"
+order_000018,matched,"clean order, should reconcile on both legs"
+order_000019,matched,"clean order, should reconcile on both legs"
+order_000020,matched,"clean order, should reconcile on both legs"
+order_000021,settlement_not_credited,Razorpay reports a settlement that never reached the bank
+order_000022,matched,"clean order, should reconcile on both legs"
+order_000023,matched,"clean order, should reconcile on both legs"
+order_000024,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
+order_000025,duplicate_settlement,two settlement rows exist for one order_id
+order_000026,no_settlement_found,order never settled (stuck/orphan)
+order_000027,fee_footing_mismatch,settled_amount does not foot against gross - fee - tax
+order_000028,bank_credit_delayed,"bank credit lands 8 days after settlement, past the window"
+order_000029,matched,"clean order, should reconcile on both legs"
+order_000030,matched,"clean order, should reconcile on both legs"
+order_000031,matched,"clean order, should reconcile on both legs"
+order_000032,matched,"clean order, should reconcile on both legs"
+order_000033,matched,"settled and credited correctly, but the narration quotes no reference — resolvable only by the LLM tier"
+order_000034,matched,"clean order, should reconcile on both legs"
+order_000035,matched,"control: refund processed AND booked correctly, must match"
+order_000036,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
+order_000037,duplicate_settlement,two settlement rows exist for one order_id
+order_000038,no_settlement_found,order never settled (stuck/orphan)
+order_000039,fee_footing_mismatch,settled_amount does not foot against gross - fee - tax
+order_000040,bank_credit_delayed,"bank credit lands 8 days after settlement, past the window"
+order_000041,matched,"clean order, should reconcile on both legs"
+order_000042,matched,"clean order, should reconcile on both legs"
+order_000043,matched,"clean order, should reconcile on both legs"
+order_000044,matched,"clean order, should reconcile on both legs"
+order_000045,settlement_not_credited,Razorpay reports a settlement that never reached the bank
+order_000046,matched,"clean order, should reconcile on both legs"
+order_000047,matched,"clean order, should reconcile on both legs"
+order_000048,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
+order_000049,duplicate_settlement,two settlement rows exist for one order_id
+order_000050,no_settlement_found,order never settled (stuck/orphan)
+order_000051,fee_footing_mismatch,settled_amount does not foot against gross - fee - tax
+order_000052,bank_credit_delayed,"bank credit lands 8 days after settlement, past the window"
+order_000053,matched,"clean order, should reconcile on both legs"
+order_000054,matched,"clean order, should reconcile on both legs"
+order_000055,matched,"clean order, should reconcile on both legs"
