@@ -14,17 +14,19 @@ python main.py --evaluate
 ## Results on the 55-order batch
 
 ```
-MATCH RATE: 47.27%   (26/55 orders confirmed on BOTH legs)
-UNRECONCILED: 29     every one carries a reason code
+MATCH RATE: 50.91%   (28/55 orders confirmed on BOTH legs)
+UNRECONCILED: 27     every one carries a reason code
 
 duplicate_settlement       5     no_settlement_found        5
 fee_footing_mismatch       5     bank_credit_delayed        5
 refund_not_reflected       4     settlement_not_credited    2
-credit_unattributed        3
+credit_unattributed        1
 ```
 
-*(Figures above are a run with **no** `OPENAI_API_KEY`, i.e. Tiers 1 and 2 only —
-the weakest honest configuration. Tier 3 recovers two more; see the ablation.)*
+Every figure in this README is from an executed run, not a projection. With no
+`OPENAI_API_KEY` set the same batch degrades honestly to **47.27%** and three
+exceptions instead of one — the missing tier costs the headline number, which
+is the point.
 
 **That number is deliberately not 95%.** The generator injects real failure
 modes on purpose, so the exception list means something instead of being a
@@ -41,6 +43,13 @@ LLM calls made: 0   (0.0 per 100 orders)
 Per-stage timings land in `output/reconciliation_report.json` under
 `throughput.stage_ms`. `llm_calls` counts **actual API round-trips**, not rows
 offered to the tier — with no key set the tier short-circuits and this stays 0.
+
+**With Tier 3 enabled the same batch takes 6,031 ms — and 6,005 ms of that is
+the three LLM calls.** The entire deterministic pipeline, both matching stages
+and 45 bank narrations, is the remaining ~26 ms. That ratio is the strongest
+argument for the tiering: every narration pushed down to Tier 1 or 2 is roughly
+2,000× cheaper in latency as well as in money. Scoping the model to the rows
+that genuinely need it is what keeps the batch fast, not just cheap.
 
 The 55-order batch is the committed default because the brief asks for 50+.
 It is not the ceiling:
@@ -64,14 +73,14 @@ evaluator scores against it:
 Injected faults:              26
   detected:                   26
   missed (false negatives):    0
-  false positives:             3
-Fault detection:     precision 89.66%   recall 100.00%
-Exact reason-code accuracy:  94.55%
+  false positives:             1
+Fault detection:     precision 96.30%   recall 100.00%
+Exact reason-code accuracy:  98.18%
 ```
 
 | reason_code | support | precision | recall | F1 |
 |---|---|---|---|---|
-| `matched` | 29 | 100.00% | 89.66% | 0.95 |
+| `matched` | 29 | 100.00% | 96.55% | 0.98 |
 | `bank_credit_delayed` | 5 | 100.00% | 100.00% | 1.00 |
 | `duplicate_settlement` | 5 | 100.00% | 100.00% | 1.00 |
 | `fee_footing_mismatch` | 5 | 100.00% | 100.00% | 1.00 |
@@ -80,21 +89,30 @@ Exact reason-code accuracy:  94.55%
 | `settlement_not_credited` | 2 | 100.00% | 100.00% | 1.00 |
 | `credit_unattributed` | 0 | — | — | — |
 
-All three false positives sit in `credit_unattributed`. Two are recovered by
-Tier 3; the third cannot be recovered by anything (see below).
+The single false positive sits in `credit_unattributed`, and it is the one case
+nothing can recover (see below).
 
-**Every injected failure mode scores 100/100.** The system's entire error is
-localised to one code, and every false positive is named in the output rather
-than buried:
+**Every injected failure mode scores 100/100, with zero misses.** The system's
+entire error is one order, named in the output rather than buried:
 
-- `order_000009` and `order_000033` — healthy orders whose narration quotes
-  **two** real UTRs, a reversal and a credit. Both deterministic tiers correctly
-  refuse, because ranking them requires reading the words in between. Tier 3
-  recovers these.
-- `order_000023` — a healthy order whose narration quotes **no reference at
-  all** (`CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted`). No tier
-  recovers this, and none should: there is nothing in the text to read. It stays
-  an exception in every configuration, including with a live model.
+`order_000023` is a healthy order whose bank narration quotes **no reference at
+all** — `CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted`. No tier recovers
+it, and none should: there is nothing in the text to read. It stays an exception
+in every configuration, including against a live model, which correctly returned
+confidence 0 rather than inventing a reference.
+
+Two further orders — `order_000009` and `order_000033` — are only matched
+*because* Tier 3 exists. Their narrations quote **two** real UTRs, a reversal and
+a credit:
+
+```
+RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100009
+```
+
+Substring matching finds both and has no basis for ranking them, so both
+deterministic tiers correctly refuse. On the live run the model picked the
+credit reference in both cases and ignored `UTR100001` — the same reversal
+reference — both times. It read the words, not the positions.
 
 ### `settlement_not_credited` vs `credit_unattributed`
 
@@ -155,15 +173,15 @@ Three constraints make that boundary real rather than rhetorical:
 |---|---|---|---|---|
 | regex only | 38.18% | 0 | 0 | 8 |
 | + fuzzy (still zero LLM calls) | **47.27%** | 5 | 0 | 3 |
-| + LLM tier | 50.91% ¹ | 5 | 2 | 1 |
+| + LLM tier | **50.91%** | 5 | 2 | 1 |
 
 **The cheap deterministic tier does 5 of the 7 mangled narrations for free.**
 The LLM is scoped down to the 2 rows that genuinely need a model. That is the
 whole "right tool in the right place" argument, as a measured number.
 
-¹ measured with a stub that reads the same narration text the live model gets.
-`python -m src.evaluate` reports this row as skipped unless `OPENAI_API_KEY` is
-set, so the printed table never claims a tier it did not run.
+All three rows are executed, the last one against the live API.
+`python -m src.evaluate` reports the LLM row as *skipped* unless
+`OPENAI_API_KEY` is set, so the printed table never claims a tier it did not run.
 
 The residual `1` is deliberate and permanent: one narration quotes no reference
 at all, and no tier should ever "resolve" it.

@@ -273,3 +273,54 @@ def test_llm_calls_are_counted_when_the_tier_actually_runs(workspace, monkeypatc
     # the model resolved nothing, but it was genuinely called for every row
     assert report["throughput"]["llm_calls"] == 3
     assert report["narration_resolution"]["resolved_by_llm"] == 0
+
+
+def test_a_wrong_llm_proposal_cannot_book_money_to_the_wrong_settlement(workspace, monkeypatch):
+    """
+    The consolidated narrations quote a reversal reference alongside the credit.
+    If the model reads the wrong one, its proposal names a real UTR and passes
+    verify_candidate -- so the only thing standing between a plausible mistake
+    and money booked against the wrong settlement is the deterministic amount
+    check. Prove it holds: nothing may become matched off a wrong proposal.
+    """
+    from types import SimpleNamespace
+
+    from src import llm_resolver
+    from src.llm_resolver import NarrationReading
+
+    data, out = workspace
+
+    # deliberately read the DR RVSL reference instead of the CR one
+    def wrong_reading(narration):
+        reversal = narration.split("DR RVSL REF ")[1].split("/")[0]
+        return NarrationReading(utr_candidate=reversal, order_id_candidate=None,
+                                confidence=0.95)
+
+    class FakeResponses:
+        def parse(self, **kwargs):
+            narration = kwargs["input"][1]["content"]
+            if "DR RVSL REF " not in narration:
+                return SimpleNamespace(output_parsed=NarrationReading(
+                    utr_candidate=None, order_id_candidate=None, confidence=0.0))
+            return SimpleNamespace(output_parsed=wrong_reading(narration))
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setattr(llm_resolver.openai, "OpenAI", FakeClient)
+
+    baseline, _ = run_reconciliation(data_dir=str(data), output_dir=str(out),
+                                     enable_llm=False)
+    misled, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
+
+    # the proposals were accepted as links -- they name real UTRs
+    assert misled["narration_resolution"]["resolved_by_llm"] == 2
+
+    # ...and still nothing extra got reconciled, because the amounts disagree
+    assert misled["reconciled_orders"] <= baseline["reconciled_orders"]
+    assert misled["match_rate_pct"] <= baseline["match_rate_pct"]
+
+    # the mismatch surfaces as an exception rather than a silent bad match
+    assert misled["exception_reason_counts"].get("bank_amount_mismatch", 0) > 0
