@@ -100,12 +100,12 @@ def ablation(data_dir="data"):
         ("+ fuzzy (still no LLM call)", dict(enable_fuzzy=True, enable_llm=False)),
         ("+ LLM tier", dict(enable_fuzzy=True, enable_llm=True)),
     ]
-    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    has_key = bool(os.environ.get("OPENAI_API_KEY"))
 
     rows = []
     for name, kwargs in configs:
         if kwargs["enable_llm"] and not has_key:
-            rows.append({"config": name, "skipped": "no ANTHROPIC_API_KEY set"})
+            rows.append({"config": name, "skipped": "no OPENAI_API_KEY set"})
             continue
         report, _ = run_reconciliation(data_dir=data_dir, write_outputs=False, **kwargs)
         rows.append({

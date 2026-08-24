@@ -17,7 +17,11 @@ injected case maps to exactly one reason code the pipeline should emit:
   cases 7-11                                                   -> clean, should match
 
 Plus targeted cases placed on otherwise-clean orders:
-  FREETEXT_ORDERS         narration with no recoverable reference -> LLM tier, else narration_unresolved
+  AMBIGUOUS_REF_ORDERS    narration quotes TWO known UTRs (a reversal and a
+                          credit) -> both deterministic tiers correctly refuse;
+                          only reading the words decides which is the credit
+  UNREADABLE_ORDERS       narration quotes no reference at all -> nothing can
+                          resolve this, and it stays an honest exception
   NOT_CREDITED_ORDERS     Razorpay settled, money never arrived   -> settlement_not_credited
   REFUND_REFLECTED_ORDERS refund processed AND booked correctly   -> control, must MATCH
   BATCH_GROUPS            N settlements paid out as 1 bank credit -> many-to-one, must match as a batch
@@ -39,7 +43,8 @@ FEE_PCT = 0.02
 TAX_PCT = 0.18  # GST on fee
 
 # Targeted cases, placed on order numbers whose modulo class is otherwise clean.
-FREETEXT_ORDERS = {9, 33}
+AMBIGUOUS_REF_ORDERS = {9, 33}
+UNREADABLE_ORDERS = {23}
 NOT_CREDITED_ORDERS = {21, 45}
 REFUND_REFLECTED_ORDERS = {11, 35}
 BATCH_GROUPS = [[7, 19, 31], [43, 55]]
@@ -178,13 +183,22 @@ def make_dataset():
             "status": status,
         })
 
-        if i in FREETEXT_ORDERS:
-            # The money is genuinely fine here -- correct settlement, correct
-            # credit. Only the narration is unreadable. Ground truth stays
-            # "matched", so a run that cannot resolve the narration scores this
-            # as a FALSE POSITIVE. That is the honest cost of having no LLM tier.
+        if i in AMBIGUOUS_REF_ORDERS:
+            # The money is fine -- correct settlement, correct credit. The
+            # narration quotes two real UTRs, one being reversed and one being
+            # credited, so every deterministic tier correctly refuses. Ground
+            # truth stays "matched": a run that cannot resolve it scores a FALSE
+            # POSITIVE, which is precisely what the LLM tier is worth.
+            note = ("settled and credited correctly, but the narration quotes a "
+                    "reversal ref alongside the credit ref — only the LLM tier "
+                    "can tell which is which")
+
+        if i in UNREADABLE_ORDERS:
+            # No reference anywhere in the text. Nothing can recover this --
+            # not the regex, not fuzzy matching, and not a model. It is the
+            # honest residual, and it stays an exception in every configuration.
             note = ("settled and credited correctly, but the narration quotes no "
-                    "reference — resolvable only by the LLM tier")
+                    "reference at all — unresolvable by any tier")
 
         if i in NOT_CREDITED_ORDERS:
             expected = "settlement_not_credited"
@@ -210,13 +224,18 @@ def make_dataset():
     return ledger_rows, settlement_rows, bank_rows, truth_rows
 
 
-def _narration(entry):
+def _narration(entry, other_utr=None):
     """Bank narrations vary in how parseable they are, exactly like real statements."""
     i, utr, customer, case = entry["order_num"], entry["utr"], entry["customer"], entry["case"]
 
-    if i in FREETEXT_ORDERS:
-        # no recoverable reference id at all -- only the LLM tier can propose anything
+    if i in UNREADABLE_ORDERS:
+        # no reference of any kind -- no tier can recover this, and that is the point
         return "CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted"
+    if i in AMBIGUOUS_REF_ORDERS:
+        # Two real UTRs in one narration: one reversed, one credited. Substring
+        # matching finds both and cannot rank them; only the surrounding words
+        # ("DR RVSL" vs "CR REF") say which one this credit actually is.
+        return (f"RAZORPAY NET STLMT AUG/DR RVSL REF {other_utr}/CR REF {utr}")
     if case == 5:
         return f"NEFT-RZPY-{utr[-6:]}/settlemnt"       # mangled, digits survive
     if case == 6:
@@ -231,6 +250,7 @@ def _emit_bank_rows(pending_bank):
     by_utr = {}
     for entry in pending_bank:
         by_utr.setdefault(entry["utr"], []).append(entry)
+    all_utrs = sorted(by_utr)
 
     for utr, entries in by_utr.items():
         if len(entries) > 1:
@@ -247,11 +267,14 @@ def _emit_bank_rows(pending_bank):
             })
         else:
             entry = entries[0]
+            # for the ambiguous case we need a second, genuinely-known UTR to
+            # quote as the reversal reference -- any settlement but this one
+            other = next((u for u in all_utrs if u != utr), utr)
             rows.append({
                 "txn_id": rid("bnk", counter),
                 "date": entry["date"].strftime("%Y-%m-%d"),
                 "amount": entry["amount"],
-                "narration": _narration(entry),
+                "narration": _narration(entry, other_utr=other),
                 "type": "credit",
             })
         counter += 1

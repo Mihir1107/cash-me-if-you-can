@@ -271,17 +271,31 @@ def test_indexed_lookup_agrees_with_a_naive_scan():
         assert extract_utr_from_narration(narration, index=index) == naive
 
 
-def test_two_utrs_in_one_narration_resolve_deterministically():
+def test_two_utrs_in_one_narration_are_refused_not_ranked():
     """
-    The naive scan iterated a set, so with two same-length UTRs present it
-    returned whichever the hash seed put first — different answers on different
-    runs. The indexed lookup always takes the earliest position in the text.
+    A narration quoting a reversal ref and a credit ref contains two real UTRs.
+    Substring matching finds both and has no basis for ranking them — picking
+    the earlier one would confidently return the reversal. It must refuse and
+    let a tier that can read the surrounding words decide.
     """
     from src.matcher import extract_utr_from_narration
 
     known = {"UTR900001", "UTR900002"}
-    assert extract_utr_from_narration("CR UTR900002 THEN UTR900001", known) == "UTR900002"
-    assert extract_utr_from_narration("CR UTR900001 THEN UTR900002", known) == "UTR900001"
+    ambiguous = "RAZORPAY NET STLMT/DR RVSL REF UTR900001/CR REF UTR900002"
+    assert extract_utr_from_narration(ambiguous, known) is None
+    # ...but a single quoted reference still resolves
+    assert extract_utr_from_narration("CR REF UTR900002 ONLY", known) == "UTR900002"
+
+
+def test_a_nested_utr_is_not_counted_as_a_second_reference():
+    """
+    UTR9000 appears inside UTR90001234 as a substring artefact, not as a second
+    reference. Position-claiming keeps that from reading as ambiguity.
+    """
+    from src.matcher import extract_utr_from_narration
+
+    known = {"UTR9000", "UTR90001234"}
+    assert extract_utr_from_narration("PAYOUT UTR90001234 CR", known) == "UTR90001234"
 
 
 def test_shared_numeric_core_stays_ambiguous_after_indexing():
@@ -298,8 +312,4 @@ def test_shared_numeric_core_stays_ambiguous_after_indexing():
     assert fuzzy_resolve_narration("NEFT-RZPY-100005/x", known, core_index=index) is None
 
 
-def test_a_longer_utr_is_not_shadowed_by_a_shorter_one_it_contains():
-    from src.matcher import extract_utr_from_narration
 
-    known = {"UTR9000", "UTR90001234"}
-    assert extract_utr_from_narration("PAYOUT UTR90001234 CR", known) == "UTR90001234"

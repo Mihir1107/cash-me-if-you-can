@@ -96,7 +96,7 @@ def test_unattributed_credits_are_not_counted_as_order_exceptions():
 # ------------------------------------------------------------ end to end
 
 def test_full_batch_runs_and_reports_honestly(workspace, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     data, out = workspace
     report, audit = run_reconciliation(data_dir=str(data), output_dir=str(out))
 
@@ -114,7 +114,8 @@ def test_full_batch_runs_and_reports_honestly(workspace, monkeypatch):
     # the two genuinely missing payouts and the two unreadable-narration credits
     # must not be collapsed into one reason code
     assert report["exception_reason_counts"]["settlement_not_credited"] == 2
-    assert report["exception_reason_counts"]["credit_unattributed"] == 2
+    # two ambiguous-reference narrations plus one with no reference at all
+    assert report["exception_reason_counts"]["credit_unattributed"] == 3
 
     # the fuzzy tier does real work, and with no key the LLM tier resolves nothing
     assert report["narration_resolution"]["resolved_by_fuzzy_no_llm"] > 0
@@ -131,7 +132,7 @@ def test_full_batch_runs_and_reports_honestly(workspace, monkeypatch):
 
 def test_every_order_gets_a_verdict(workspace, monkeypatch):
     """No order may vanish: matched or excepted, never silently dropped."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     data, out = workspace
     report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
 
@@ -142,7 +143,7 @@ def test_every_order_gets_a_verdict(workspace, monkeypatch):
 
 
 def test_missing_bank_statement_degrades_instead_of_crashing(workspace, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     data, out = workspace
     (data / "bank_statement.csv").unlink()
 
@@ -159,7 +160,7 @@ def test_missing_bank_statement_degrades_instead_of_crashing(workspace, monkeypa
 
 
 def test_structurally_broken_bank_statement_also_degrades(workspace, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     data, out = workspace
     (data / "bank_statement.csv").write_text("nonsense,columns\n1,2\n")
 
@@ -179,60 +180,60 @@ def test_missing_backbone_source_fails_loudly(workspace):
         run_reconciliation(data_dir=str(data), output_dir=str(out))
 
 
-def test_llm_tier_recovers_the_free_text_narrations(workspace, monkeypatch):
+def test_llm_tier_recovers_the_ambiguous_reference_narrations(workspace, monkeypatch):
     """
-    Stubs the model so the LLM tier's contribution is a measured number rather
-    than an assumption. The two free-text credits are genuinely fine money --
-    resolving them should remove both false positives and raise the match rate.
+    Measures the LLM tier's contribution with a stub that reads the SAME text
+    the real model gets, and nothing else.
+
+    An earlier version of this test looked the correct UTR up in the settlement
+    table and handed it to the fake model. That passed while asserting a
+    capability the real model could not have — the narration it was fed quoted
+    no reference at all, so live it correctly returned nulls and resolved zero.
+    A stub may only use information present in its own input.
     """
-    import json as _json
+    import re
     from types import SimpleNamespace
 
     from src import llm_resolver
+    from src.llm_resolver import NarrationReading
 
     data, out = workspace
-    bank = pd.read_csv(data / "bank_statement.csv")
-    settlements = pd.read_csv(data / "razorpay_settlements.csv")
 
-    # map each free-text credit back to the settlement it really belongs to,
-    # then have the stubbed model "read" that reference out of the narration
-    by_amount = {round(float(r["settled_amount"]), 2): r["utr"]
-                 for _, r in settlements.iterrows()}
-    free_text = bank[bank["narration"].str.contains("no ref quoted")]
-    answers = {row["narration"] + str(row["txn_id"]): by_amount[round(float(row["amount"]), 2)]
-               for _, row in free_text.iterrows()}
-    assert len(answers) == 2
-
-    pending = list(answers.values())
-
-    class FakeMessages:
-        def create(self, **kwargs):
-            utr = pending.pop(0)
-            return SimpleNamespace(content=[SimpleNamespace(
-                type="text",
-                text=_json.dumps({"utr_candidate": utr, "order_id_candidate": None,
-                                  "confidence": 0.9}))])
+    class FakeResponses:
+        def parse(self, **kwargs):
+            narration = kwargs["input"][-1]["content"]
+            # exactly what a competent model does here: read the credit ref and
+            # ignore the reversal ref. Nothing else is in scope.
+            match = re.search(r"CR REF (\S+)", narration)
+            return SimpleNamespace(output_parsed=NarrationReading(
+                utr_candidate=match.group(1) if match else None,
+                order_id_candidate=None,
+                confidence=0.9 if match else 0.0))
 
     class FakeClient:
         def __init__(self, **kwargs):
-            self.messages = FakeMessages()
+            self.responses = FakeResponses()
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-a-real-key")
-    monkeypatch.setattr(llm_resolver.anthropic, "Anthropic", FakeClient)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setattr(llm_resolver.openai, "OpenAI", FakeClient)
 
     baseline, _ = run_reconciliation(data_dir=str(data), output_dir=str(out),
                                      enable_llm=False)
     with_llm, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
 
     assert with_llm["narration_resolution"]["resolved_by_llm"] == 2
-    assert with_llm["narration_resolution"]["unresolved"] == 0
     assert with_llm["reconciled_orders"] == baseline["reconciled_orders"] + 2
     assert with_llm["match_rate_pct"] > baseline["match_rate_pct"]
-    assert with_llm["unattributed_bank_credits"] == []
+
+    # the narration quoting no reference at all stays unresolved in every
+    # configuration -- no tier can invent what the bank never wrote down
+    assert with_llm["narration_resolution"]["unresolved"] == 1
+    assert len(with_llm["unattributed_bank_credits"]) == 1
+    assert "no ref quoted" in with_llm["unattributed_bank_credits"][0]["narration"]
 
 
 def test_throughput_is_measured_and_reports_zero_llm_calls_without_a_key(workspace, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     data, out = workspace
     report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
 
@@ -242,35 +243,33 @@ def test_throughput_is_measured_and_reports_zero_llm_calls_without_a_key(workspa
     assert tp["wall_clock_ms"] > 0
     assert tp["records_per_second"] > 0
     # rows were offered to the LLM tier, but with no key nothing was ever called
-    assert report["narration_resolution"]["unresolved"] == 2
+    assert report["narration_resolution"]["unresolved"] == 3
     assert tp["llm_calls"] == 0
     assert tp["llm_calls_per_100_orders"] == 0.0
     assert set(tp["stage_ms"]) >= {"stage_a_ledger_settlement", "stage_b_settlement_bank"}
 
 
 def test_llm_calls_are_counted_when_the_tier_actually_runs(workspace, monkeypatch):
-    import json as _json
     from types import SimpleNamespace
 
     from src import llm_resolver
+    from src.llm_resolver import NarrationReading
 
     data, out = workspace
 
-    class FakeMessages:
-        def create(self, **kwargs):
-            return SimpleNamespace(content=[SimpleNamespace(
-                type="text",
-                text=_json.dumps({"utr_candidate": None, "order_id_candidate": None,
-                                  "confidence": 0.0}))])
+    class FakeResponses:
+        def parse(self, **kwargs):
+            return SimpleNamespace(output_parsed=NarrationReading(
+                utr_candidate=None, order_id_candidate=None, confidence=0.0))
 
     class FakeClient:
         def __init__(self, **kwargs):
-            self.messages = FakeMessages()
+            self.responses = FakeResponses()
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-a-real-key")
-    monkeypatch.setattr(llm_resolver.anthropic, "Anthropic", FakeClient)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setattr(llm_resolver.openai, "OpenAI", FakeClient)
 
     report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
-    # the model resolved nothing, but it was genuinely called twice
-    assert report["throughput"]["llm_calls"] == 2
+    # the model resolved nothing, but it was genuinely called for every row
+    assert report["throughput"]["llm_calls"] == 3
     assert report["narration_resolution"]["resolved_by_llm"] == 0

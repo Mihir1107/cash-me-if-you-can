@@ -181,12 +181,30 @@ def extract_utr_from_narration(narration, known_utrs=None, index=None):
         index = build_utr_index(known_utrs or ())
 
     normalized = re.sub(r"[^A-Z0-9]", "", str(narration).upper())
+    hits = []
+    claimed = []  # character spans already accounted for by a longer match
+
+    # Longest first, so a genuine reference claims its span before any shorter
+    # UTR nested inside it can be counted as a second, separate reference.
     for length in sorted(index, reverse=True):
         bucket = index[length]
         for start in range(len(normalized) - length + 1):
             hit = bucket.get(normalized[start:start + length])
-            if hit is not None:
-                return hit
+            if hit is None:
+                continue
+            end = start + length
+            if any(start < c_end and c_start < end for c_start, c_end in claimed):
+                continue  # sits inside a reference we already read
+            claimed.append((start, end))
+            if hit not in hits:
+                hits.append(hit)
+
+    # A narration quoting two known UTRs -- "reversal of X, credit for Y" -- is
+    # ambiguous, and taking whichever appears first would confidently pick the
+    # reversal. Deterministic code cannot tell which reference is the credit
+    # without reading the words around it, so it refuses and hands off.
+    if len(hits) == 1:
+        return hits[0]
     return None
 
 

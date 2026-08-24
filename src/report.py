@@ -4,7 +4,7 @@ confirmed it -- ledger<->settlement AND settlement<->bank.
 
 An earlier version of this file scored the match rate off Stage A alone, which
 meant five orders were counted as matched while simultaneously appearing in the
-exception list, and a missing ANTHROPIC_API_KEY cost the headline number
+exception list, and a missing OPENAI_API_KEY cost the headline number
 nothing. A match rate that can't lose points when verification fails isn't
 measuring anything.
 """

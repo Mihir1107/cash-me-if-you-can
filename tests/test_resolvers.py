@@ -56,12 +56,12 @@ def test_fuzzy_tier_splits_rows_it_can_and_cannot_recover():
 # -------------------------------------------------------------- LLM tier
 
 def test_no_api_key_means_exception_never_a_forced_match(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     links, exceptions = llm_resolve([bank_row("bnk_1", "CR/ONLINE TRF/no ref")], KNOWN)
     assert links == []
     assert len(exceptions) == 1
     assert exceptions[0]["reason_code"] == "narration_unresolved"
-    assert "no ANTHROPIC_API_KEY" in exceptions[0]["basis"]
+    assert "no OPENAI_API_KEY" in exceptions[0]["basis"]
 
 
 def test_a_confident_llm_proposal_for_an_unknown_utr_is_rejected(monkeypatch):
@@ -100,13 +100,13 @@ def test_verified_proposal_becomes_a_link_not_a_match(monkeypatch):
 
 
 def test_llm_failure_is_an_exception_not_a_guess(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
 
     class Boom:
         def __init__(self, **kwargs):
             raise RuntimeError("connection reset")
 
-    monkeypatch.setattr(llm_resolver.anthropic, "Anthropic", Boom)
+    monkeypatch.setattr(llm_resolver.openai, "OpenAI", Boom)
     links, exceptions = llm_resolve([bank_row("bnk_1", "narration")], KNOWN)
     assert links == []
     assert "routed to exception" in exceptions[0]["basis"]
@@ -124,23 +124,24 @@ def test_verify_candidate_rules():
 
 # ------------------------------------- the request the LLM tier actually sends
 
-def _fake_anthropic(monkeypatch, payload, captured):
+def _fake_openai(monkeypatch, payload, captured):
     """Stands in for the SDK so the request shape and parsing are covered."""
-    import json as _json
     from types import SimpleNamespace
 
-    class FakeMessages:
-        def create(self, **kwargs):
+    from src.llm_resolver import NarrationReading
+
+    class FakeResponses:
+        def parse(self, **kwargs):
             captured.update(kwargs)
-            return SimpleNamespace(
-                content=[SimpleNamespace(type="text", text=_json.dumps(payload))])
+            parsed = None if payload is None else NarrationReading(**payload)
+            return SimpleNamespace(output_parsed=parsed)
 
     class FakeClient:
         def __init__(self, **kwargs):
-            self.messages = FakeMessages()
+            self.responses = FakeResponses()
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-a-real-key")
-    monkeypatch.setattr(llm_resolver.anthropic, "Anthropic", FakeClient)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-a-real-key")
+    monkeypatch.setattr(llm_resolver.openai, "OpenAI", FakeClient)
 
 
 def test_llm_request_never_contains_settlement_data(monkeypatch):
@@ -151,37 +152,55 @@ def test_llm_request_never_contains_settlement_data(monkeypatch):
     """
     captured = {}
     narration = "NEFT-RZPY-900001/settlemnt"
-    _fake_anthropic(monkeypatch, {
+    _fake_openai(monkeypatch, {
         "utr_candidate": "900001", "order_id_candidate": None, "confidence": 0.9,
     }, captured)
 
     result = llm_resolver.resolve_narration(narration)
 
     assert result["utr_candidate"] == "900001"
-    assert captured["messages"] == [{"role": "user", "content": narration}]
+    assert captured["input"] == [
+        {"role": "system", "content": llm_resolver.SYSTEM_PROMPT},
+        {"role": "user", "content": narration},
+    ]
     for known in KNOWN:
         assert known not in str(captured)
 
 
 def test_llm_request_asks_for_schema_constrained_json(monkeypatch):
     captured = {}
-    _fake_anthropic(monkeypatch, {
+    _fake_openai(monkeypatch, {
         "utr_candidate": None, "order_id_candidate": None, "confidence": 0.0,
     }, captured)
 
     llm_resolver.resolve_narration("CR/ONLINE TRF/no ref")
 
-    fmt = captured["output_config"]["format"]
-    assert fmt["type"] == "json_schema"
-    assert fmt["schema"]["additionalProperties"] is False
-    assert set(fmt["schema"]["required"]) == {
+    # strict structured output: the response is schema-valid by construction,
+    # so nothing downstream has to salvage JSON out of prose
+    assert captured["text_format"] is llm_resolver.NarrationReading
+    schema = llm_resolver.NarrationReading.model_json_schema()
+    assert set(schema["required"]) == {
         "utr_candidate", "order_id_candidate", "confidence"}
-    assert captured["model"] == llm_resolver.MODEL
+    assert captured["model"] == llm_resolver.MODEL == "gpt-4o-mini"
+
+
+def test_a_refusal_or_unparsable_reading_becomes_an_exception(monkeypatch):
+    """`output_parsed` is None when the model declines. Never treat that as a match."""
+    captured = {}
+    _fake_openai(monkeypatch, None, captured)
+
+    result = llm_resolver.resolve_narration("CR/ONLINE TRF/no ref")
+    assert result["utr_candidate"] is None
+    assert result["llm_invoked"] is True
+
+    links, exceptions = llm_resolve([bank_row("bnk_1", "CR/ONLINE TRF/no ref")], KNOWN)
+    assert links == []
+    assert "no parsable reading" in exceptions[0]["basis"]
 
 
 def test_llm_tier_end_to_end_with_a_stubbed_model(monkeypatch):
     captured = {}
-    _fake_anthropic(monkeypatch, {
+    _fake_openai(monkeypatch, {
         "utr_candidate": "900001", "order_id_candidate": None, "confidence": 0.92,
     }, captured)
 

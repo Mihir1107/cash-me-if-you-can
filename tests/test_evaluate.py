@@ -82,7 +82,7 @@ def test_root_cause_wins_when_an_order_fails_both_legs():
 
 
 def test_evaluation_of_the_real_batch_misses_nothing(workspace, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     data, out = workspace
     payload, result, ablation_rows = run_evaluation(str(data), str(out))
 
@@ -90,16 +90,16 @@ def test_evaluation_of_the_real_batch_misses_nothing(workspace, monkeypatch):
     # credits the LLM tier would resolve, and they are reported as such
     assert result["fault_detection"]["missed"] == 0
     assert result["fault_detection"]["recall"] == 1.0
-    assert result["fault_detection"]["false_positives"] == 2
-    assert len(result["misclassified"]) == 2
+    assert result["fault_detection"]["false_positives"] == 3
+    assert len(result["misclassified"]) == 3
     assert all(m["expected"] == "matched" for m in result["misclassified"])
 
     assert (out / "evaluation.json").exists()
-    assert payload["match_rate_pct"] == 49.09
+    assert payload["match_rate_pct"] == 47.27  # keyless: LLM tier resolves nothing
 
 
 def test_ablation_shows_the_fuzzy_tier_earning_its_place(workspace, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     data, out = workspace
     _, _, rows = run_evaluation(str(data), str(out))
 
@@ -109,4 +109,5 @@ def test_ablation_shows_the_fuzzy_tier_earning_its_place(workspace, monkeypatch)
     assert with_fuzzy["resolved_by_fuzzy"] == 5
     assert with_fuzzy["resolved_by_llm"] == 0        # zero API calls to get there
     assert with_fuzzy["unresolved_narrations"] < regex_only["unresolved_narrations"]
+    assert with_fuzzy["unresolved_narrations"] == 3
     assert rows[2]["skipped"]                        # LLM row honestly skipped

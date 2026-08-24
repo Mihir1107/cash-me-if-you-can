@@ -4,33 +4,39 @@ narration that neither the regex matcher nor the fuzzy tier could resolve.
 
 The boundary, stated precisely:
 
-  * The LLM reads one narration string and proposes what reference it seems to
-    quote. That's it.
+  * The model reads one narration string and proposes what reference it seems
+    to quote. That's it.
   * It is never shown the list of valid UTRs. It cannot pattern-match its way
     to a plausible-looking answer -- it has to read one out of the text, and
-    then matcher.py checks whether that reference exists at all.
+    then verify_candidate() checks whether that reference exists at all.
   * It never sees settlement amounts, never compares them, and never decides
     that money matches. Amount, batch total and date-window verification all
     happen in matcher.py, after this module has returned.
   * Its output is a link proposal, not a match. A proposal only decides which
     settlement a bank credit gets compared against.
 
-Requires ANTHROPIC_API_KEY in the environment. If it isn't set, every row is
+Model choice: gpt-4o-mini. The tier is scoped so tightly that a full run makes
+two calls regardless of batch size, so this is not a capability bottleneck --
+it is reading a reference number out of one short string. The cheapest model
+that supports strict structured outputs is the right tool for that.
+
+Requires OPENAI_API_KEY in the environment. If it isn't set, every row is
 routed straight to the exception bucket instead of guessing -- a missing key
 degrades the system, it doesn't make it lie.
 """
 
-import json
 import os
+
+from pydantic import BaseModel
 
 from src.fuzzy_resolver import _normalize, _numeric_core
 
 try:
-    import anthropic
+    import openai
 except ImportError:
-    anthropic = None
+    openai = None
 
-MODEL = "claude-opus-5"
+MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """You extract a candidate payment reference (UTR) or order id from a \
 single bank narration string.
@@ -39,29 +45,27 @@ You do NOT decide if amounts match. You do NOT confirm anything is reconciled. Y
 ONLY report what reference the narration appears to quote, reading it out of the text \
 in front of you.
 
+A narration may quote more than one reference -- typically a reversal or debit alongside \
+the credit that actually landed. Report the reference for the CREDIT, the money arriving \
+in this transaction, and ignore references attached to reversals, debits or adjustments. \
+The words around each reference tell you which is which.
+
 Never invent a reference that is not present in the narration. If the narration quotes \
 no reference you can read, return nulls and confidence 0. Returning nothing is a correct \
 and useful answer -- a guess is not."""
 
-RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "utr_candidate": {
-            "type": ["string", "null"],
-            "description": "The payment reference quoted in the narration, or null.",
-        },
-        "order_id_candidate": {
-            "type": ["string", "null"],
-            "description": "An order id quoted in the narration, or null.",
-        },
-        "confidence": {
-            "type": "number",
-            "description": "0 to 1. How clearly the narration quotes this reference.",
-        },
-    },
-    "required": ["utr_candidate", "order_id_candidate", "confidence"],
-    "additionalProperties": False,
-}
+
+class NarrationReading(BaseModel):
+    """
+    The only thing the model is allowed to return. Strict structured output, so
+    the response is schema-valid by construction -- there is no fence-stripping
+    or best-effort JSON parsing here to get wrong.
+    """
+
+    utr_candidate: str | None
+    order_id_candidate: str | None
+    confidence: float
+
 
 CONFIDENCE_THRESHOLD = 0.7
 
@@ -69,38 +73,41 @@ CONFIDENCE_THRESHOLD = 0.7
 def resolve_narration(narration: str) -> dict:
     """
     Ask the model what reference this narration quotes. Returns
-    {"utr_candidate", "order_id_candidate", "confidence"[, "note"]}.
+    {"utr_candidate", "order_id_candidate", "confidence", "llm_invoked"[, "note"]}.
 
     Deliberately takes only the narration -- no settlement data is in scope here.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
 
-    if not anthropic or not api_key:
+    if not openai or not api_key:
         return {"utr_candidate": None, "order_id_candidate": None, "confidence": 0.0,
                 "llm_invoked": False,
-                "note": "LLM unavailable — no ANTHROPIC_API_KEY set, routed to exception"}
+                "note": "LLM unavailable — no OPENAI_API_KEY set, routed to exception"}
 
     try:
         # client construction is inside the try too: a bad base_url or a broken
         # SDK config must degrade this row, not take the whole batch down
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
+        client = openai.OpenAI(api_key=api_key)
+        resp = client.responses.parse(
             model=MODEL,
-            max_tokens=2000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": narration}],
-            # structured output: the response is schema-valid JSON, so there is
-            # no fence-stripping or best-effort parsing to get wrong
-            output_config={
-                "effort": "low",  # reading one short string; no need to spend more
-                "format": {"type": "json_schema", "schema": RESPONSE_SCHEMA},
-            },
+            input=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": narration},
+            ],
+            text_format=NarrationReading,
+            max_output_tokens=2000,
         )
-        text = next(b.text for b in resp.content if b.type == "text")
-        parsed = json.loads(text)
-        parsed.setdefault("confidence", 0.0)
-        parsed["llm_invoked"] = True
-        return parsed
+        reading = resp.output_parsed
+        if reading is None:
+            # the model declined, or returned nothing parseable
+            return {"utr_candidate": None, "order_id_candidate": None, "confidence": 0.0,
+                    "llm_invoked": True,
+                    "note": "LLM returned no parsable reading, routed to exception"}
+
+        return {"utr_candidate": reading.utr_candidate,
+                "order_id_candidate": reading.order_id_candidate,
+                "confidence": reading.confidence or 0.0,
+                "llm_invoked": True}
     except Exception as e:
         # Any failure -- network, auth, quota, malformed response -- is an
         # exception for that row, never a fallback guess.

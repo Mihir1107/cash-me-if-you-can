@@ -14,14 +14,17 @@ python main.py --evaluate
 ## Results on the 55-order batch
 
 ```
-MATCH RATE: 49.09%   (27/55 orders confirmed on BOTH legs)
-UNRECONCILED: 28     every one carries a reason code
+MATCH RATE: 47.27%   (26/55 orders confirmed on BOTH legs)
+UNRECONCILED: 29     every one carries a reason code
 
 duplicate_settlement       5     no_settlement_found        5
 fee_footing_mismatch       5     bank_credit_delayed        5
 refund_not_reflected       4     settlement_not_credited    2
-credit_unattributed        2
+credit_unattributed        3
 ```
+
+*(Figures above are a run with **no** `OPENAI_API_KEY`, i.e. Tiers 1 and 2 only —
+the weakest honest configuration. Tier 3 recovers two more; see the ablation.)*
 
 **That number is deliberately not 95%.** The generator injects real failure
 modes on purpose, so the exception list means something instead of being a
@@ -31,7 +34,7 @@ good" — it's "is 49% *correct*." Which is why the next section exists.
 ## Throughput
 
 ```
-Wall clock: 7.5 ms  (13,369 records/sec over 100 records)
+Wall clock: 8.3 ms  (12,048 records/sec over 100 records)
 LLM calls made: 0   (0.0 per 100 orders)
 ```
 
@@ -44,9 +47,9 @@ It is not the ceiling:
 
 | batch | wall clock | records/sec | faults caught | missed | false positives |
 |---|---|---|---|---|---|
-| 55 | 7.5 ms | 13,369 | 26 / 26 | 0 | 2 |
-| 500 | 72.4 ms | 13,158 | 211 / 211 | 0 | 2 |
-| 5,000 | 554.5 ms | 17,272 | 2,086 / 2,086 | 0 | 2 |
+| 55 | 8.3 ms | 12,048 | 26 / 26 | 0 | 3 |
+| 500 | 49.1 ms | 19,425 | 211 / 211 | 0 | 3 |
+| 5,000 | 522.0 ms | 18,347 | 2,086 / 2,086 | 0 | 3 |
 
 Zero missed faults at every scale. Reproduce with `N_ORDERS` in
 `data/generate_synthetic.py`.
@@ -61,14 +64,14 @@ evaluator scores against it:
 Injected faults:              26
   detected:                   26
   missed (false negatives):    0
-  false positives:             2
-Fault detection:     precision 92.86%   recall 100.00%
-Exact reason-code accuracy:  96.36%
+  false positives:             3
+Fault detection:     precision 89.66%   recall 100.00%
+Exact reason-code accuracy:  94.55%
 ```
 
 | reason_code | support | precision | recall | F1 |
 |---|---|---|---|---|
-| `matched` | 29 | 100.00% | 93.10% | 0.96 |
+| `matched` | 29 | 100.00% | 89.66% | 0.95 |
 | `bank_credit_delayed` | 5 | 100.00% | 100.00% | 1.00 |
 | `duplicate_settlement` | 5 | 100.00% | 100.00% | 1.00 |
 | `fee_footing_mismatch` | 5 | 100.00% | 100.00% | 1.00 |
@@ -77,13 +80,21 @@ Exact reason-code accuracy:  96.36%
 | `settlement_not_credited` | 2 | 100.00% | 100.00% | 1.00 |
 | `credit_unattributed` | 0 | — | — | — |
 
+All three false positives sit in `credit_unattributed`. Two are recovered by
+Tier 3; the third cannot be recovered by anything (see below).
+
 **Every injected failure mode scores 100/100.** The system's entire error is
-localised to one code, and both false positives are named in the output rather
-than buried: `order_000009` and `order_000033` are healthy orders whose bank
-narration quotes no reference at all. Without an `ANTHROPIC_API_KEY` the
-pipeline cannot attribute their credits, so it reports them as
-`credit_unattributed`. That is the honest cost of running the deterministic
-tiers alone — and it is exactly what the LLM tier is for.
+localised to one code, and every false positive is named in the output rather
+than buried:
+
+- `order_000009` and `order_000033` — healthy orders whose narration quotes
+  **two** real UTRs, a reversal and a credit. Both deterministic tiers correctly
+  refuse, because ranking them requires reading the words in between. Tier 3
+  recovers these.
+- `order_000023` — a healthy order whose narration quotes **no reference at
+  all** (`CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted`). No tier
+  recovers this, and none should: there is nothing in the text to read. It stays
+  an exception in every configuration, including with a live model.
 
 ### `settlement_not_credited` vs `credit_unattributed`
 
@@ -112,12 +123,20 @@ decide whether money matches. It never does here.
 | **Stage B** — settlement ↔ bank | UTR match on narration, batch-total + date-window verification | no |
 | **Tier 1** — narration regex | normalise separators, find a *known* UTR | no |
 | **Tier 2** — fuzzy recovery | recover a UTR whose prefix the bank mangled | **no** |
-| **Tier 3** — LLM | read a reference out of genuinely free text | yes |
+| **Tier 3** — LLM | read a reference out of genuinely free text | yes (`gpt-4o-mini`) |
 
 Tiers 2 and 3 only ever **propose** which settlement a bank credit should be
 compared against. Stage B then runs one verification pass over everything, so a
 proposal from the model faces exactly the same amount, batch-total and
 date-window checks a clean regex match does.
+
+**Model sizing follows from the scoping.** Because Tiers 1 and 2 absorb
+everything structurally recoverable, Tier 3 makes **two calls per run at any
+batch size** — and its whole job is reading a reference number out of one short
+string. That is a small-model task, so it runs on `gpt-4o-mini` with strict
+structured outputs. A full 55-order run costs well under a cent. Picking the
+cheapest model that can do the job is the same judgment call as not using a
+model at all in Tiers 1 and 2.
 
 Three constraints make that boundary real rather than rhetorical:
 
@@ -134,17 +153,20 @@ Three constraints make that boundary real rather than rhetorical:
 
 | config | match rate | resolved by fuzzy | resolved by LLM | unresolved |
 |---|---|---|---|---|
-| regex only | 40.00% | 0 | 0 | 7 |
-| + fuzzy (still zero LLM calls) | **49.09%** | 5 | 0 | 2 |
-| + LLM tier | 52.73% ¹ | 5 | 2 | 0 |
+| regex only | 38.18% | 0 | 0 | 8 |
+| + fuzzy (still zero LLM calls) | **47.27%** | 5 | 0 | 3 |
+| + LLM tier | 50.91% ¹ | 5 | 2 | 1 |
 
 **The cheap deterministic tier does 5 of the 7 mangled narrations for free.**
 The LLM is scoped down to the 2 rows that genuinely need a model. That is the
 whole "right tool in the right place" argument, as a measured number.
 
-¹ measured with a stubbed model in `test_llm_tier_recovers_the_free_text_narrations`.
-The live API call is not exercised in this environment (no key available), so
-the row is reported as skipped by `python -m src.evaluate` unless you set one.
+¹ measured with a stub that reads the same narration text the live model gets.
+`python -m src.evaluate` reports this row as skipped unless `OPENAI_API_KEY` is
+set, so the printed table never claims a tier it did not run.
+
+The residual `1` is deliberate and permanent: one narration quotes no reference
+at all, and no tier should ever "resolve" it.
 
 ## The failure story — a match rate that couldn't lose
 
@@ -180,6 +202,24 @@ Three things came out of fixing it:
   verdicts. The index also removed a latent nondeterminism: the old scan
   iterated a `set`, so a narration quoting two same-length UTRs resolved
   differently depending on the hash seed.
+- **A passing test asserted a capability the model does not have.** The LLM
+  tier was covered by a stub that looked the correct UTR up in the settlement
+  table and handed it to the fake model. The test passed. The number it produced
+  went into this README as a measured ablation result. Then the tier ran against
+  the live API for the first time and resolved **zero** — because the narration
+  it was being fed (`.../no ref quoted`) contained no reference at all, so the
+  real model correctly returned nulls and confidence 0.
+
+  The code was right; the *test* was wrong, and so was the synthetic data. A
+  stub may only use information present in its own input — this one was feeding
+  the model the answer key it is deliberately never shown. The data now poses a
+  task language can actually solve: a narration quoting two real UTRs, one
+  reversed and one credited, where only the surrounding words say which is
+  which. That fix exposed a further bug — the regex tier took the
+  earliest-positioned match, so on those narrations it confidently returned the
+  *reversal* reference. Both deterministic tiers now refuse when a narration
+  quotes more than one known UTR, which is the correct handoff to Tier 3.
+
 - The `try/except` that was supposed to handle a missing bank file never ran.
   `load_sources()` read all three CSVs *before* the `try`, so a missing
   `bank_statement.csv` raised `FileNotFoundError` and killed the batch. Sources
@@ -194,10 +234,10 @@ pip install -r requirements.txt
 python data/generate_synthetic.py    # regenerate the 4 source files (seeded, reproducible)
 python main.py                       # reconcile, print the report
 python main.py --evaluate            # ...and score it against ground truth
-python -m pytest tests/ -q           # 55 tests
+python -m pytest tests/ -q           # 56 tests
 ```
 
-Set `ANTHROPIC_API_KEY` to enable Tier 3. Without it the pipeline still runs
+Set `OPENAI_API_KEY` to enable Tier 3. Without it the pipeline still runs
 end to end and reports those rows honestly as exceptions.
 
 ## Output
@@ -225,7 +265,7 @@ src/reconcile.py             orchestrator, tier order, source degradation
 src/evaluate.py              ground-truth scoring + tier ablation
 src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log
-tests/                       55 tests
+tests/                       56 tests
 ```
 
 ## Known limits
