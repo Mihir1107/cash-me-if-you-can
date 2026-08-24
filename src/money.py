@@ -36,21 +36,9 @@ one is cash we hold and cannot place, the other is cash we are owed and cannot
 find. Netting them would hide both.
 """
 
+from src.matcher import _num  # one strict numeric reader, shared
+
 IDENTITY_TOLERANCE = 0.01  # rupees; guards float drift, not real discrepancies
-
-
-def _num(row, name):
-    try:
-        value = row[name]
-    except (KeyError, IndexError):
-        return None
-    if value is None:
-        return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if number != number else number
 
 
 def build_exposure_index(ledger_df, settlement_df):

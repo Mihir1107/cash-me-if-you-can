@@ -7,6 +7,7 @@ anything at all when there is no API key.
 """
 
 import pandas as pd
+import pytest
 
 from src import llm_resolver
 from src.fuzzy_resolver import fuzzy_resolve_narration
@@ -208,3 +209,46 @@ def test_llm_tier_end_to_end_with_a_stubbed_model(monkeypatch):
     assert exceptions == []
     assert links[0]["utr_candidate"] == "UTR900001"   # prefix restored by verification
     assert links[0]["confidence"] == 0.92
+
+
+# ------------------------------------- fuzzy rule 2: character-level damage
+
+SEQUENTIAL = {f"UTR{100000 + i}" for i in range(1, 10)}
+
+
+def test_fuzzy_recovers_a_reference_missing_one_character():
+    """
+    Banks drop and mangle characters. Rule 1 needs the digits verbatim, so this
+    is what rule 2 is for: close enough to exactly one known reference.
+    """
+    result = fuzzy_resolve_narration("NEFT RZPY UTR10005 CR", SEQUENTIAL)
+    assert result["utr_candidate"] == "UTR100005"
+    assert result["confidence"] >= 0.9
+    assert "string match" in result["basis"]
+
+
+@pytest.mark.parametrize("narration,why", [
+    ("NEFT RZPY UTR100050 CR", "transposed digits"),
+    ("NEFT RZPY UTRIOOOO5 CR", "letter/digit confusion"),
+    ("NEFT RZPY UTR1000 CR", "truncated beyond recognition"),
+    ("CR/ONLINE TRF/no ref quoted", "no reference at all"),
+])
+def test_fuzzy_refuses_rather_than_guessing(narration, why):
+    """
+    With nine sequential references in scope, a near-miss is as likely to be the
+    wrong one as the right one. Refusing costs an LLM call; guessing costs money.
+    """
+    assert fuzzy_resolve_narration(narration, SEQUENTIAL) is None, why
+
+
+def test_fuzzy_refuses_when_two_references_are_equally_close():
+    """A tie is not a winner. It goes to the next tier."""
+    known = {"UTR100005", "UTR100006"}
+    # equidistant from both
+    assert fuzzy_resolve_narration("NEFT RZPY UTR10000X CR", known) is None
+
+
+def test_fuzzy_never_proposes_across_a_length_gap():
+    """The prefilter must not be doing the matching by accident."""
+    known = {"UTR100005"}
+    assert fuzzy_resolve_narration("REF 1 CR", known) is None

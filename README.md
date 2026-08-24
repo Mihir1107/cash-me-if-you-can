@@ -10,7 +10,7 @@ match rate, the money at risk, and a reason-coded exception list.
 pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 103 tests
+python -m pytest tests/ -q       # 130 tests
 ```
 
 Set `OPENAI_API_KEY` to enable the LLM tier. Without it the pipeline still runs
@@ -97,6 +97,15 @@ Three constraints make that boundary real:
 3. **No API key degrades the system, it does not make it lie.** The match rate
    drops by 3.63 points.
 
+And the case that matters most, because it is the one the architecture exists
+for: **a tier being confidently wrong cannot produce a false match.** Feed the
+fuzzy tier a narration corrupted one character toward the wrong settlement and
+it proposes that settlement at 94% confidence. Stage B compares the credit
+against it, sees 4,882.00 where 976.40 was expected, and refuses. Zero matches
+created, both orders reported accurately. Same for a model proposal naming a
+real but wrong settlement at 100% confidence. `tests/test_wrong_proposals.py`
+covers this at every confidence level up to certainty.
+
 ### What each tier is worth
 
 | Configuration | Match rate | Resolved by fuzzy | Resolved by LLM |
@@ -149,7 +158,7 @@ exact reason-code accuracy 100.00% | money identity holds
 
 ## How it is tested
 
-103 tests, three kinds:
+130 tests at 98% line coverage, four kinds:
 
 - **`test_stress.py`**, 29 adversarial cases written to break the pipeline. The
   bar for each: do not crash, do not silently invent a match.
@@ -157,6 +166,11 @@ exact reason-code accuracy 100.00% | money identity holds
   batches. The load-bearing one: *a match always has bank confirmation*, stated
   over arbitrary input rather than over the batch I happened to write.
 - **`test_generalize.py`**, the alt-convention run above, as a regression.
+- **`test_wrong_proposals.py`**, upstream tiers being confidently wrong.
+
+`test_output.py` covers the printed summary separately, including the degraded
+and empty-batch shapes. It was the least-tested code in the project while being
+the only code guaranteed to run during a live demo.
 
 ## What broke
 
@@ -198,7 +212,7 @@ src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log, one run_id per run
 data/generate_synthetic.py   primary batch + ground_truth.csv answer key
 data/generate_alt_format.py  alt-convention batch
-tests/                       103 tests
+tests/                       130 tests, 98% line coverage
 ```
 
 Outputs land in `output/`: the report, the evaluation, and `audit_trail.jsonl`,

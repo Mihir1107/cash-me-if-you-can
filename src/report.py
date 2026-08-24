@@ -142,7 +142,12 @@ def print_summary(report):
           f"({report['reconciled_orders']}/{report['total_orders']} orders "
           f"confirmed on BOTH legs)")
     print(f"UNRECONCILED ORDERS: {report['unreconciled_orders']}")
-    print(f"EXCEPTION RECORDS:   {report['exception_count']}")
+    # An order can fail both legs and so carry two records. They are different
+    # problems with the same order, and conflating them would either hide one
+    # or double-count the order, so say plainly when the two numbers differ.
+    extra = report["exception_count"] - report["unreconciled_orders"]
+    suffix = (f"  ({extra} order(s) failed both legs)" if extra > 0 else "")
+    print(f"EXCEPTION RECORDS:   {report['exception_count']}{suffix}")
 
     money = report.get("money") or {}
     if money:
