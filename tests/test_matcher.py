@@ -387,3 +387,48 @@ def test_a_normal_fee_is_not_flagged_as_excessive():
     results, _ = match_ledger_to_settlement(
         pd.DataFrame([ledger()]), pd.DataFrame([settlement()]))
     assert results[0].status == "matched"
+
+
+def test_reusing_the_tier1_scan_gives_identical_verdicts():
+    """
+    Stage B can reuse the partition Tier 1 already computed instead of scanning
+    every narration again. That is a performance change and must be nothing
+    else, so the two paths are pinned against each other.
+    """
+    from src.matcher import link_bank_rows
+
+    settlements = pd.DataFrame([
+        settlement("order_1", utr="UTR900001", settled=976.40, settlement_id="s1"),
+        settlement("order_2", utr="UTR900002", settled=500.00, settlement_id="s2"),
+    ])
+    credits = pd.DataFrame([
+        bank(txn_id="b1", amount=976.40, narration="RAZORPAY UTR:UTR900001"),
+        bank(txn_id="b2", amount=500.00, narration="CR/ONLINE TRF/no ref"),
+    ])
+    known = set(settlements["utr"])
+    proposals = {"b2": "UTR900002"}
+
+    rescanned, _ = match_settlement_to_bank(settlements, credits, proposals)
+    reused, _ = match_settlement_to_bank(
+        settlements, credits, proposals,
+        partition=link_bank_rows(credits, known))
+
+    assert [(r.order_id, r.status, r.reason_code) for r in rescanned] == \
+           [(r.order_id, r.status, r.reason_code) for r in reused]
+    # and the proposal genuinely took effect on both paths
+    assert all(r.status == "matched" for r in reused)
+
+
+def test_reusing_the_scan_still_discards_a_proposal_for_an_unknown_settlement():
+    """The verification gate does not move because the arithmetic got cheaper."""
+    from src.matcher import link_bank_rows
+
+    settlements = pd.DataFrame([settlement("order_1", settled=976.40)])
+    credits = pd.DataFrame([bank(txn_id="b1", amount=976.40,
+                                 narration="CR/ONLINE TRF/no ref")])
+
+    results, _ = match_settlement_to_bank(
+        settlements, credits, {"b1": "UTR_NOT_REAL"},
+        partition=link_bank_rows(credits, {"UTR900001"}))
+
+    assert not [r for r in results if r.status == "matched"]

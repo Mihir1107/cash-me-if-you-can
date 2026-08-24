@@ -246,7 +246,9 @@ def test_throughput_is_measured_and_reports_zero_llm_calls_without_a_key(workspa
     report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
 
     tp = report["throughput"]
-    assert tp["orders"] == 55
+    # the order universe, matching total_orders exactly. This assertion pinned
+    # len(ledger) and so locked in the disagreement it should have caught.
+    assert tp["orders"] == report["total_orders"] == 57
     assert tp["records_processed"] == tp["orders"] + tp["bank_rows"]
     assert tp["wall_clock_ms"] > 0
     assert tp["records_per_second"] > 0
@@ -356,3 +358,39 @@ def test_audit_trail_appends_and_never_destroys_an_earlier_run(workspace, monkey
     assert after_second[:len(after_first)] == after_first
     assert len(first.entries_for_run(log)) == len(first.entries)
     assert len(second.entries_for_run(log)) == len(second.entries)
+
+
+def test_degraded_stage_b_emits_one_verdict_per_order_not_per_settlement_row(
+        workspace, monkeypatch):
+    """
+    A duplicated settlement produced two identical bank_source_unavailable
+    exceptions, inflating exception_count and making the printed
+    "N order(s) failed both legs" line overstate by exactly the number of
+    duplicates. The healthy path already deduped; this one had its own loop.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    data, out = workspace
+    (data / "bank_statement.csv").unlink()
+
+    report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
+
+    bank_stage = [e for e in report["exceptions"] if e["stage"] == "settlement_bank"]
+    assert len(bank_stage) == len({e["order_id"] for e in bank_stage})
+
+    settlements = pd.read_csv(data / "razorpay_settlements.csv")
+    assert len(settlements) > settlements["order_id"].nunique()  # duplicates exist
+    assert len(bank_stage) == settlements["order_id"].nunique()
+
+
+def test_the_report_never_ships_two_different_order_counts(workspace, monkeypatch):
+    """
+    total_orders moved to the union of both sides and the throughput block was
+    left on len(ledger), so one report carried 57 and 55 under one roof.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    data, out = workspace
+    report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
+
+    tp = report["throughput"]
+    assert tp["orders"] == report["total_orders"]
+    assert tp["records_processed"] == report["total_orders"] + tp["bank_rows"]

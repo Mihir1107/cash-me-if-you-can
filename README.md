@@ -11,7 +11,7 @@ queue saying who fixes what.
 pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 149 tests
+python -m pytest tests/ -q       # 153 tests
 ```
 
 Set `OPENAI_API_KEY` to enable the LLM tier. Without it the pipeline still runs
@@ -188,14 +188,17 @@ under a cent.
 ## Throughput
 
 ```
-11.2 ms for 102 records (9,091 records/sec), 0 LLM calls
+7.7 ms for 107 records (13,878 records/sec), 0 LLM calls
 ```
 
-| Batch | Wall clock | Records/sec | Faults caught | Missed |
+| Orders | Wall clock | Records/sec | Faults caught | Missed |
 |---|---|---|---|---|
-| 55 | 11.2 ms | 9,091 | 29 / 29 | 0 |
-| 500 | 52.1 ms | 18,320 | 214 / 214 | 0 |
-| 5,000 | 543.3 ms | 17,632 | 2,089 / 2,089 | 0 |
+| 57 | 6.3 ms | 17,038 | 32 / 32 | **0** |
+| 502 | 51.3 ms | 18,713 | 217 / 217 | **0** |
+| 5,000 | 544.9 ms | 17,585 | 2,090 / 2,090 | **0** |
+
+Best of three, so the small-batch figure is not dominated by warm-up. Throughput
+is flat as the batch grows.
 
 With Tier 3 on, the same batch takes 8,179 ms, of which 8,156 ms is three API
 calls. The entire deterministic pipeline is the remaining 23 ms. Every narration
@@ -218,7 +221,7 @@ exact reason-code accuracy 100.00% | money identity holds
 
 ## How it is tested
 
-149 tests at 98% line coverage, four kinds:
+153 tests at 98% line coverage, four kinds:
 
 - **`test_stress.py`**, 29 adversarial cases written to break the pipeline. The
   bar for each: do not crash, do not silently invent a match.
@@ -283,7 +286,7 @@ src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log, one run_id per run
 data/generate_synthetic.py   primary batch + ground_truth.csv answer key
 data/generate_alt_format.py  alt-convention batch
-tests/                       149 tests, 98% line coverage
+tests/                       153 tests, 98% line coverage
 ```
 
 Outputs land in `output/`: the report, the evaluation, and `audit_trail.jsonl`,

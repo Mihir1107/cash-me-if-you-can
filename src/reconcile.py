@@ -62,14 +62,23 @@ def _degrade_stage_b(settlements, reason):
     than silently disappearing -- an unverifiable settlement must never end up
     on the matched side of the ledger just because we couldn't read the bank.
     """
+    # One verdict per order, not per settlement row. The healthy Stage B path
+    # collapses duplicate settlement rows into one leg per order; this path was
+    # written separately and never picked that up, so a duplicated settlement
+    # produced two identical exceptions and inflated the headline count.
+    seen = []
+    for _, row in settlements.iterrows():
+        if row["order_id"] not in seen:
+            seen.append(row["order_id"])
+
     return [
         MatchResult(
-            order_id=row["order_id"], stage="settlement_bank", status="exception",
+            order_id=order_id, stage="settlement_bank", status="exception",
             reason_code="bank_source_unavailable",
             basis=f"bank statement unusable, settlement could not be verified: {reason}",
             confidence=0.0,
         )
-        for _, row in settlements.iterrows()
+        for order_id in seen
     ]
 
 
@@ -160,8 +169,12 @@ def run_reconciliation(data_dir="data", output_dir="output",
         known_utrs = {row["utr"] for _, row in settlements.iterrows()}
 
         # --- Tier 1: deterministic narration parse ---
-        _, unresolved, _ = stage("tier1_narration_regex",
-                                 lambda: link_bank_rows(bank, known_utrs))
+        # Kept whole, not just the unresolved slice: Stage B needs the same
+        # partition, and rescanning every narration to rebuild it doubled the
+        # dominant O(N) cost of the deterministic pipeline for no verdict change.
+        partition = stage("tier1_narration_regex",
+                          lambda: link_bank_rows(bank, known_utrs))
+        _, unresolved, _ = partition
 
         # --- Tier 2: deterministic fuzzy recovery, still zero LLM calls ---
         if enable_fuzzy:
@@ -187,7 +200,8 @@ def run_reconciliation(data_dir="data", output_dir="output",
                        for link in fuzzy_links + llm_links}
         stage_b_results, _ = stage(
             "stage_b_settlement_bank",
-            lambda: match_settlement_to_bank(settlements, bank, extra_links))
+            lambda: match_settlement_to_bank(settlements, bank, extra_links,
+                                             partition=partition))
 
     for r in stage_b_results:
         audit.log_match_result(r)
@@ -205,13 +219,16 @@ def run_reconciliation(data_dir="data", output_dir="output",
                   detail={"narration": e["bank_row"]["narration"],
                           "txn_id": e["bank_row"]["txn_id"]})
 
+    # The order universe is both sides, not just the ledger. A settlement for an
+    # order the merchant never booked is a real finding, so it has to be in the
+    # denominator too, or reconciled + unreconciled stops equalling total.
+    # Distinct ids, not rows: a double-booked order is one order with a problem,
+    # not two orders. Computed once, because the report and the throughput block
+    # shipping different order counts is exactly what happened when it was not.
+    order_count = _order_universe(ledger, settlements)
+
     report = build_report(
-        # The order universe is both sides, not just the ledger. A settlement
-        # for an order the merchant never booked is a real finding, so it has to
-        # be in the denominator too, or reconciled + unreconciled stops equalling
-        # total. Distinct ids, not rows: a double-booked order is one order with
-        # a problem, not two orders.
-        total_orders=_order_universe(ledger, settlements),
+        total_orders=order_count,
         stage_a_results=stage_a_results,
         stage_b_results=stage_b_results,
         fuzzy_links=fuzzy_links,
@@ -219,7 +236,7 @@ def run_reconciliation(data_dir="data", output_dir="output",
         llm_exceptions=llm_exceptions,
         bank_error=bank_error,
         exposure_index=build_exposure_index(ledger, settlements),
-        throughput=_throughput(len(ledger), bank, timings, t_start,
+        throughput=_throughput(order_count, bank, timings, t_start,
                                llm_calls=sum(1 for r in llm_links + llm_exceptions
                                              if r.get("llm_invoked"))),
     )

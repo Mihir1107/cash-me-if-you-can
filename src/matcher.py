@@ -323,20 +323,45 @@ def extract_utr_from_narration(narration, known_utrs=None, index=None):
     return None
 
 
-def link_bank_rows(bank_df, known_utrs, extra_links=None):
+def apply_link_proposals(partition, extra_links, known_utrs):
     """
-    Returns (utr -> [bank rows], unresolved bank rows).
+    Fold the later tiers' proposals into an existing partition.
+
+    Scanning every narration again just to place a handful of proposals would
+    redo the whole batch's O(N) work for an O(proposals) change, so this moves
+    only the rows a tier actually spoke for. A proposal naming a settlement we
+    do not hold is discarded here, exactly as it is on the scanning path: the
+    verification gate does not move just because the arithmetic got cheaper.
+    """
+    by_utr, unresolved, non_credits = partition
+    if not extra_links:
+        return by_utr, unresolved, non_credits
+
+    linked = {utr: list(rows) for utr, rows in by_utr.items()}
+    still_unresolved = []
+    for row in unresolved:
+        proposed = extra_links.get(row["txn_id"])
+        if proposed in known_utrs:
+            linked.setdefault(proposed, []).append(row)
+        else:
+            still_unresolved.append(row)
+    return linked, still_unresolved, non_credits
+
+
+def link_bank_rows(bank_df, known_utrs, extra_links=None, index=None):
+    """
+    Returns (utr -> [bank rows], unresolved bank rows, non-credit rows).
 
     extra_links maps txn_id -> utr and carries proposals from the later tiers
     (fuzzy, then LLM). A proposal only decides which settlement a credit is
     *compared against*; it never decides whether the credit matches. Every link
     in here still goes through the amount and date checks below.
     """
-    extra_links = extra_links or {}
     by_utr = {}
     unresolved = []
     non_credits = []
-    index = build_utr_index(known_utrs)  # built once, not once per bank row
+    if index is None:
+        index = build_utr_index(known_utrs)  # built once, not once per bank row
 
     for _, bank_row in bank_df.iterrows():
         # A real statement carries debits too. A chargeback or reversal can
@@ -349,15 +374,14 @@ def link_bank_rows(bank_df, known_utrs, extra_links=None):
 
         utr = extract_utr_from_narration(bank_row["narration"], index=index)
         if utr is None:
-            proposed = extra_links.get(bank_row["txn_id"])
-            # a proposal is only usable if it names a settlement we actually hold
-            utr = proposed if proposed in known_utrs else None
-        if utr is None:
             unresolved.append(bank_row)
         else:
             by_utr.setdefault(utr, []).append(bank_row)
 
-    return by_utr, unresolved, non_credits
+    # Proposals are folded in afterwards rather than inline, so the scanning
+    # pass and the proposal pass are separable and the scan can be reused.
+    return apply_link_proposals((by_utr, unresolved, non_credits),
+                                extra_links, known_utrs)
 
 
 def tolerance_for(legs):
@@ -365,16 +389,25 @@ def tolerance_for(legs):
     return AMOUNT_TOLERANCE * max(1, len(legs))
 
 
-def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
+def match_settlement_to_bank(settlement_df, bank_df, extra_links=None,
+                             partition=None):
     """
     Stage B. Settlement-driven, so every settlement gets a verdict.
     Returns (results, unresolved_bank_rows) -- unresolved go to the later tiers.
+
+    `partition` is the (by_utr, unresolved, non_credits) split Tier 1 already
+    computed. Passing it in avoids scanning every narration a second time; the
+    proposals in `extra_links` are folded onto it rather than triggering a
+    rescan. Omit it and Stage B scans for itself, which is what the tests do.
     """
     results = []
 
     known_utrs = {row["utr"] for _, row in settlement_df.iterrows()}
-    bank_by_utr, unresolved, non_credits = link_bank_rows(
-        bank_df, known_utrs, extra_links)
+    utr_index = build_utr_index(known_utrs)
+    if partition is None:
+        partition = link_bank_rows(bank_df, known_utrs, index=utr_index)
+    bank_by_utr, unresolved, non_credits = apply_link_proposals(
+        partition, extra_links, known_utrs)
 
     # A debit quoting a settlement's own reference is that settlement being
     # clawed back: a chargeback, a reversal, a recall. Filtering non-credits out
@@ -382,9 +415,8 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
     # settlement could match cleanly on Monday, be reversed on Tuesday, and
     # still be reported as reconciled money the merchant does not have.
     reversals_by_utr = {}
-    debit_index = build_utr_index(known_utrs)
     for row in non_credits:
-        utr = extract_utr_from_narration(row["narration"], index=debit_index)
+        utr = extract_utr_from_narration(row["narration"], index=utr_index)
         if utr is not None:
             reversals_by_utr.setdefault(utr, []).append(row)
 
