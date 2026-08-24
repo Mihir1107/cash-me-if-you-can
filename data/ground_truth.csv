@@ -44,7 +44,7 @@ order_000042,matched,"clean order, should reconcile on both legs"
 order_000043,matched,"clean order, should reconcile on both legs"
 order_000044,matched,"clean order, should reconcile on both legs"
 order_000045,settlement_not_credited,Razorpay reports a settlement that never reached the bank
-order_000046,matched,"clean order, should reconcile on both legs"
+order_000046,settlement_reversed,"credited on time, then clawed back by a chargeback debit"
 order_000047,matched,"clean order, should reconcile on both legs"
 order_000048,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
 order_000049,duplicate_settlement,two settlement rows exist for one order_id
@@ -54,3 +54,5 @@ order_000052,bank_credit_delayed,"bank credit lands 8 days after settlement, pas
 order_000053,matched,"clean order, should reconcile on both legs"
 order_000054,matched,"clean order, should reconcile on both legs"
 order_000055,matched,"clean order, should reconcile on both legs"
+order_000901,no_ledger_entry,Razorpay settled an order the merchant never booked
+order_000902,no_ledger_entry,Razorpay settled an order the merchant never booked

@@ -1,17 +1,17 @@
 {
-  "total_orders": 55,
-  "reconciled_orders": 23,
-  "unreconciled_orders": 32,
-  "match_rate_pct": 41.82,
+  "total_orders": 57,
+  "reconciled_orders": 22,
+  "unreconciled_orders": 35,
+  "match_rate_pct": 38.6,
   "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank",
   "stages": {
     "ledger_settlement": {
       "matched": 35,
-      "exceptions": 20
+      "exceptions": 22
     },
     "settlement_bank": {
-      "matched": 38,
-      "exceptions": 12
+      "matched": 39,
+      "exceptions": 13
     }
   },
   "narration_resolution": {
@@ -20,10 +20,10 @@
     "unresolved": 3
   },
   "money": {
-    "total_exposure": 635548.23,
-    "confirmed_value": 255896.12,
-    "at_risk_value": 379652.11,
-    "value_match_rate_pct": 40.26,
+    "total_exposure": 664425.15,
+    "confirmed_value": 242514.62,
+    "at_risk_value": 421910.53,
+    "value_match_rate_pct": 36.5,
     "at_risk_by_reason": {
       "fee_footing_mismatch": 88397.13,
       "duplicate_settlement": 75769.24,
@@ -31,6 +31,8 @@
       "bank_credit_delayed": 52592.63,
       "credit_unattributed": 43868.63,
       "refund_not_reflected": 41518.23,
+      "no_ledger_entry": 28876.92,
+      "settlement_reversed": 13381.5,
       "settlement_not_credited": 6201.64,
       "ledger_gross_amount_mismatch": 3474.27,
       "bank_amount_mismatch": 3319.26
@@ -43,26 +45,264 @@
     },
     "exposure_note": "exposure = settled_amount where a settlement exists, else the ledger amount (booked revenue with no payout)"
   },
+  "triage": {
+    "exception_rows": 35,
+    "incident_count": 12,
+    "material_incident_count": 10,
+    "materiality_threshold": 3322.13,
+    "materiality_basis": "0.5% of total exposure, floored at 1,000.00",
+    "value_above_threshold": 418591.27,
+    "value_below_threshold": 3319.26,
+    "by_owner": {
+      "razorpay_support": {
+        "incidents": 6,
+        "orders": 19,
+        "value_at_risk": 238198.35
+      },
+      "merchant_finance": {
+        "incidents": 4,
+        "orders": 10,
+        "value_at_risk": 117738.05
+      },
+      "bank_ops": {
+        "incidents": 1,
+        "orders": 5,
+        "value_at_risk": 52592.63
+      },
+      "chargeback_ops": {
+        "incidents": 1,
+        "orders": 1,
+        "value_at_risk": 13381.5
+      }
+    },
+    "incidents": [
+      {
+        "reason_code": "no_ledger_entry",
+        "signature": "all",
+        "owner": "merchant_finance",
+        "urgency": "critical",
+        "recommended_action": "Book the missing order. Money was received that the ledger cannot explain, so revenue is understated until it is recorded.",
+        "order_count": 2,
+        "value_at_risk": 28876.92,
+        "material": true,
+        "order_ids": [
+          "order_000901",
+          "order_000902"
+        ],
+        "sample_basis": "Razorpay settled 15672.12 for this order but the merchant's ledger has no entry for it",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "settlement_reversed",
+        "signature": "order_000046",
+        "owner": "chargeback_ops",
+        "urgency": "critical",
+        "recommended_action": "Treat as a chargeback. The credit was taken back, so the cash position is overstated until the reversal is booked.",
+        "order_count": 1,
+        "value_at_risk": 13381.5,
+        "material": true,
+        "order_ids": [
+          "order_000046"
+        ],
+        "sample_basis": "1 debit(s) totalling 13381.5 quote settlement UTR UTR100046 \u2014 money was credited and then taken back",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "settlement_not_credited",
+        "signature": "all",
+        "owner": "razorpay_support",
+        "urgency": "critical",
+        "recommended_action": "Raise with Razorpay quoting the UTR. A payout was reported and no matching credit exists in the statement.",
+        "order_count": 2,
+        "value_at_risk": 6201.64,
+        "material": true,
+        "order_ids": [
+          "order_000021",
+          "order_000045"
+        ],
+        "sample_basis": "settlement UTR UTR100021 has no matching bank credit and no unattributed credit for 2373.24 \u2014 money never arrived",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "fee_footing_mismatch",
+        "signature": "fee_ratio_1.2",
+        "owner": "razorpay_support",
+        "urgency": "high",
+        "recommended_action": "Query the fee schedule. The settlement does not foot against its own gross, fee, tax and refund.",
+        "order_count": 5,
+        "value_at_risk": 88397.13,
+        "material": true,
+        "order_ids": [
+          "order_000003",
+          "order_000015",
+          "order_000027",
+          "order_000039",
+          "order_000051"
+        ],
+        "sample_basis": "gross-fee-tax-refund=5827.8 vs actual_settled=5799.12",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "duplicate_settlement",
+        "signature": "all",
+        "owner": "razorpay_support",
+        "urgency": "high",
+        "recommended_action": "Confirm which settlement row is authoritative before booking either, so the order is not recognised twice.",
+        "order_count": 5,
+        "value_at_risk": 75769.24,
+        "material": true,
+        "order_ids": [
+          "order_000001",
+          "order_000013",
+          "order_000025",
+          "order_000037",
+          "order_000049"
+        ],
+        "sample_basis": "2 settlement rows found for one order_id",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "refund_not_reflected",
+        "signature": "all",
+        "owner": "merchant_finance",
+        "urgency": "high",
+        "recommended_action": "Post the refund to the ledger. Revenue is overstated by the refunded amount until it is booked.",
+        "order_count": 4,
+        "value_at_risk": 41518.23,
+        "material": true,
+        "order_ids": [
+          "order_000012",
+          "order_000024",
+          "order_000036",
+          "order_000048"
+        ],
+        "sample_basis": "settlement nets a refund of 5727.23 but ledger still books 19090.78 with status='paid'",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "no_settlement_found",
+        "signature": "all",
+        "owner": "razorpay_support",
+        "urgency": "medium",
+        "recommended_action": "Check payment status. The order is booked as paid and no settlement exists for it.",
+        "order_count": 5,
+        "value_at_risk": 64511.08,
+        "material": true,
+        "order_ids": [
+          "order_000002",
+          "order_000014",
+          "order_000026",
+          "order_000038",
+          "order_000050"
+        ],
+        "sample_basis": "no settlement row exists for this order_id",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "credit_unattributed",
+        "signature": "all",
+        "owner": "merchant_finance",
+        "urgency": "medium",
+        "recommended_action": "Attribute the credit by hand. The money is in the account; only the narration is unreadable.",
+        "order_count": 3,
+        "value_at_risk": 43868.63,
+        "material": true,
+        "order_ids": [
+          "order_000009",
+          "order_000023",
+          "order_000033"
+        ],
+        "sample_basis": "settlement UTR UTR100009 has no readable bank credit, but 1 unattributed credit(s) match the expected 17616.68 \u2014 narration unreadable, NOT matched on amount",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "ledger_gross_amount_mismatch",
+        "signature": "order_000020",
+        "owner": "merchant_finance",
+        "urgency": "medium",
+        "recommended_action": "Correct the booked amount, or explain the difference. The ledger and the settlement disagree on the sale value.",
+        "order_count": 1,
+        "value_at_risk": 3474.27,
+        "material": true,
+        "order_ids": [
+          "order_000020"
+        ],
+        "sample_basis": "ledger=4308.24 vs settlement_gross=3558.24",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "bank_credit_delayed",
+        "signature": "delay_over_1w",
+        "owner": "bank_ops",
+        "urgency": "low",
+        "recommended_action": "Monitor. The credit landed outside the normal window but did land; chase only if this recurs for the same account.",
+        "order_count": 5,
+        "value_at_risk": 52592.63,
+        "material": true,
+        "order_ids": [
+          "order_000004",
+          "order_000016",
+          "order_000028",
+          "order_000040",
+          "order_000052"
+        ],
+        "sample_basis": "bank credit 8 days after settlement (window=5)",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "bank_amount_mismatch",
+        "signature": "order_000032",
+        "owner": "razorpay_support",
+        "urgency": "high",
+        "recommended_action": "Reconcile the payout against the credit. The bank moved a different amount from the one the settlement reports.",
+        "order_count": 1,
+        "value_at_risk": 2196.27,
+        "material": false,
+        "order_ids": [
+          "order_000032"
+        ],
+        "sample_basis": "bank credited 1946.27 vs settlement total 2196.27 (single settlement)",
+        "routed_by_policy": true
+      },
+      {
+        "reason_code": "bank_amount_mismatch",
+        "signature": "order_000008",
+        "owner": "razorpay_support",
+        "urgency": "high",
+        "recommended_action": "Reconcile the payout against the credit. The bank moved a different amount from the one the settlement reports.",
+        "order_count": 1,
+        "value_at_risk": 1122.99,
+        "material": false,
+        "order_ids": [
+          "order_000008"
+        ],
+        "sample_basis": "bank credited 872.99 vs settlement total 1122.99 (single settlement)",
+        "routed_by_policy": true
+      }
+    ],
+    "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
+  },
   "throughput": {
-    "wall_clock_ms": 10.66,
+    "wall_clock_ms": 9.66,
     "orders": 55,
-    "bank_rows": 47,
-    "records_processed": 102,
-    "records_per_second": 9568.5,
+    "bank_rows": 50,
+    "records_processed": 105,
+    "records_per_second": 10869.6,
     "llm_calls": 0,
     "llm_calls_per_100_orders": 0.0,
     "stage_ms": {
-      "load_sources": 1.19,
-      "stage_a_ledger_settlement": 1.53,
-      "tier1_narration_regex": 0.78,
+      "load_sources": 1.25,
+      "stage_a_ledger_settlement": 1.6,
+      "tier1_narration_regex": 0.82,
       "tier2_narration_fuzzy": 0.42,
-      "tier3_narration_llm": 0.01,
-      "stage_b_settlement_bank": 2.57
+      "tier3_narration_llm": 0.02,
+      "stage_b_settlement_bank": 2.59
     }
   },
   "bank_source_error": null,
-  "exception_count": 32,
+  "exception_count": 35,
   "exception_reason_counts": {
+    "no_ledger_entry": 2,
     "duplicate_settlement": 5,
     "no_settlement_found": 5,
     "fee_footing_mismatch": 5,
@@ -71,9 +311,34 @@
     "bank_credit_delayed": 5,
     "bank_amount_mismatch": 2,
     "credit_unattributed": 3,
-    "settlement_not_credited": 2
+    "settlement_not_credited": 2,
+    "settlement_reversed": 1
   },
   "exceptions": [
+    {
+      "order_id": "order_000901",
+      "stage": "ledger_settlement",
+      "reason_code": "no_ledger_entry",
+      "basis": "Razorpay settled 15672.12 for this order but the merchant's ledger has no entry for it",
+      "detail": {
+        "settlement_ids": [
+          "stl_000056"
+        ],
+        "settled_amount": 15672.12
+      }
+    },
+    {
+      "order_id": "order_000902",
+      "stage": "ledger_settlement",
+      "reason_code": "no_ledger_entry",
+      "basis": "Razorpay settled 13204.8 for this order but the merchant's ledger has no entry for it",
+      "detail": {
+        "settlement_ids": [
+          "stl_000057"
+        ],
+        "settled_amount": 13204.8
+      }
+    },
     {
       "order_id": "order_000001",
       "stage": "ledger_settlement",
@@ -400,6 +665,21 @@
       "detail": {
         "utr": "UTR100045",
         "expected_amount": 3828.4
+      },
+      "also_matched_in_stage_a": true
+    },
+    {
+      "order_id": "order_000046",
+      "stage": "settlement_bank",
+      "reason_code": "settlement_reversed",
+      "basis": "1 debit(s) totalling 13381.5 quote settlement UTR UTR100046 \u2014 money was credited and then taken back",
+      "detail": {
+        "utr": "UTR100046",
+        "reversed_amount": 13381.5,
+        "reversal_txn_ids": [
+          "bnk_000041"
+        ],
+        "settled_total": 13381.5
       },
       "also_matched_in_stage_a": true
     },

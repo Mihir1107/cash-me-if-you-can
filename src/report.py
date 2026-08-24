@@ -12,6 +12,7 @@ measuring anything.
 import json
 
 from src.money import build_money_report
+from src.triage import build_triage_report, print_triage
 
 
 def build_report(total_orders, stage_a_results, stage_b_results,
@@ -68,9 +69,13 @@ def build_report(total_orders, stage_a_results, stage_b_results,
     # Order counts answer "how many broke". Money answers "how much is at
     # stake", which is the question a controller actually asks.
     money = None
+    triage = None
     if exposure_index is not None:
         money = build_money_report(exposure_index, reconciled, exception_list,
                                    unattributed)
+        # Finding the breaks is half the loop. Routing them is the other half.
+        triage = build_triage_report(exception_list, exposure_index,
+                                     money["total_exposure"])
 
     return {
         "total_orders": total_orders,
@@ -94,6 +99,7 @@ def build_report(total_orders, stage_a_results, stage_b_results,
             "unresolved": len(llm_exceptions),
         },
         "money": money or {},
+        "triage": triage or {},
         "throughput": throughput or {},
         "bank_source_error": bank_error,
         "exception_count": len(exception_list),
@@ -175,6 +181,10 @@ def print_summary(report):
     print("\nException breakdown (reason_code : count):")
     for code, n in sorted(report["exception_reason_counts"].items(), key=lambda x: -x[1]):
         print(f"  {code:30s} {n}")
+
+    if report.get("triage"):
+        print()
+        print_triage(report["triage"])
 
     if report["unattributed_bank_credits"]:
         print(f"\nUnattributed bank credits: {len(report['unattributed_bank_credits'])}")

@@ -77,8 +77,20 @@ def build_exposure_index(ledger_df, settlement_df):
             ledger_amount = _num(row, "amount")
             index[oid] = {
                 "exposure": round(abs(ledger_amount), 2) if ledger_amount is not None else 0.0,
-                "basis": "ledger amount — booked revenue with no settlement",
+                "basis": "ledger amount, booked revenue with no settlement",
             }
+
+    # Settled but never booked. There is no ledger amount to fall back on, so
+    # the exposure is what Razorpay says it paid: money that arrived and the
+    # merchant's books cannot explain.
+    for oid, amounts in settled.items():
+        if oid in index:
+            continue
+        usable = [abs(a) for a in amounts if a is not None]
+        index[oid] = {
+            "exposure": round(max(usable), 2) if usable else 0.0,
+            "basis": "settled_amount, money received with no ledger entry",
+        }
     return index
 
 

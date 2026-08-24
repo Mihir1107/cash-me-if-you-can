@@ -100,8 +100,11 @@ def test_full_batch_runs_and_reports_honestly(workspace, monkeypatch):
     data, out = workspace
     report, audit = run_reconciliation(data_dir=str(data), output_dir=str(out))
 
-    assert report["total_orders"] == 55  # the brief asks for a 50+ record batch
-    assert report["reconciled_orders"] + report["unreconciled_orders"] == 55
+    # 55 booked orders plus 2 Razorpay settled but the ledger never recorded.
+    # Those two belong in the denominator: a settlement the merchant cannot
+    # explain is exactly the break reconciliation exists to surface.
+    assert report["total_orders"] == 57  # the brief asks for a 50+ record batch
+    assert report["reconciled_orders"] + report["unreconciled_orders"] == 57
     assert 0 < report["match_rate_pct"] < 100  # neither a fake 100% nor a dead run
 
     # every injected failure mode reaches the exception list under its own code
@@ -111,6 +114,7 @@ def test_full_batch_runs_and_reports_honestly(workspace, monkeypatch):
         "refund_not_reflected", "duplicate_settlement", "no_settlement_found",
         "fee_footing_mismatch", "bank_credit_delayed", "settlement_not_credited",
         "credit_unattributed", "bank_amount_mismatch", "ledger_gross_amount_mismatch",
+        "no_ledger_entry", "settlement_reversed",
     }
 
     # the two genuinely missing payouts and the two unreadable-narration credits
@@ -139,9 +143,11 @@ def test_every_order_gets_a_verdict(workspace, monkeypatch):
     report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
 
     ledger = pd.read_csv(data / "internal_ledger.csv")
+    settlements = pd.read_csv(data / "razorpay_settlements.csv")
+    known = set(ledger["order_id"]) | set(settlements["order_id"])
     excepted = {e["order_id"] for e in report["exceptions"]}
     assert len(excepted) == report["unreconciled_orders"]
-    assert excepted <= set(ledger["order_id"])
+    assert excepted <= known  # includes orders only Razorpay knows about
 
 
 def test_missing_bank_statement_degrades_instead_of_crashing(workspace, monkeypatch):

@@ -73,6 +73,16 @@ def _degrade_stage_b(settlements, reason):
     ]
 
 
+def _order_universe(ledger, settlements):
+    """Every order either side knows about, counted once."""
+    ids = set()
+    if len(ledger):
+        ids |= set(ledger["order_id"])
+    if len(settlements):
+        ids |= set(settlements["order_id"])
+    return len(ids)
+
+
 def _throughput(order_count, bank, timings, t_start, llm_calls):
     """
     The brief asks for throughput alongside accuracy. Report it honestly: total
@@ -196,10 +206,12 @@ def run_reconciliation(data_dir="data", output_dir="output",
                           "txn_id": e["bank_row"]["txn_id"]})
 
     report = build_report(
-        # distinct orders, not ledger rows: a double-booked order is one order
-        # with a problem, and counting it twice would break the report's
-        # reconciled + unreconciled == total invariant
-        total_orders=int(ledger["order_id"].nunique()) if len(ledger) else 0,
+        # The order universe is both sides, not just the ledger. A settlement
+        # for an order the merchant never booked is a real finding, so it has to
+        # be in the denominator too, or reconciled + unreconciled stops equalling
+        # total. Distinct ids, not rows: a double-booked order is one order with
+        # a problem, not two orders.
+        total_orders=_order_universe(ledger, settlements),
         stage_a_results=stage_a_results,
         stage_b_results=stage_b_results,
         fuzzy_links=fuzzy_links,

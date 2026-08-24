@@ -93,9 +93,10 @@ def test_evaluation_of_the_real_batch_misses_nothing(workspace, monkeypatch):
     assert result["fault_detection"]["false_positives"] == 3
     assert len(result["misclassified"]) == 3
     assert all(m["expected"] == "matched" for m in result["misclassified"])
+    assert all(m["expected"] == "matched" for m in result["misclassified"])
 
     assert (out / "evaluation.json").exists()
-    assert payload["match_rate_pct"] == 41.82  # keyless: LLM tier resolves nothing
+    assert payload["match_rate_pct"] == 38.6  # keyless: LLM tier resolves nothing
 
 
 def test_ablation_shows_the_fuzzy_tier_earning_its_place(workspace, monkeypatch):

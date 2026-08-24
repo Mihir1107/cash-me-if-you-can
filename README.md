@@ -2,15 +2,16 @@
 
 **Razorpay AI Buildathon, Track 04 (AI Finance Controller)**
 
-Closes one finance-ops loop across a 55-record batch: a merchant's internal
+Closes one finance-ops loop across a 57-order batch: a merchant's internal
 ledger against Razorpay settlements against the actual bank statement. Reports a
-match rate, the money at risk, and a reason-coded exception list.
+match rate, the money at risk, a reason-coded exception list, and a routed work
+queue saying who fixes what.
 
 ```bash
 pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 130 tests
+python -m pytest tests/ -q       # 143 tests
 ```
 
 Set `OPENAI_API_KEY` to enable the LLM tier. Without it the pipeline still runs
@@ -23,23 +24,25 @@ audit trail.
 
 ## Results
 
-| | no API key | with API key |
-|---|---|---|
-| Match rate (3-way confirmed) | 41.82% | **45.45%** |
-| Injected faults detected | 29 / 29 | 29 / 29 |
-| Missed faults | **0** | **0** |
-| False positives | 3 | 1 |
-| Reason-code accuracy | 94.55% | 98.18% |
+| | no API key |
+|---|---|
+| Match rate (3-way confirmed) | 38.60% |
+| Injected faults detected | **32 / 32** |
+| Missed faults | **0** |
+| False positives | 3 |
+| Reason-code accuracy | 94.74% |
+
+With `OPENAI_API_KEY` set, the LLM tier resolves two more narrations and both
+figures improve. The table above is the weakest honest configuration, which is
+what a clone without credentials reproduces exactly.
 
 The match rate is deliberately not 95%. The generator injects real failure modes
 on purpose, so the exception list means something. The number that measures the
 *agent* is 29/29 with zero misses; the match rate measures the *data*.
 
 Verified against `data/ground_truth.csv`, which the generator writes at
-injection time and the pipeline never reads. Every injected fault type, all
-eight of them, scores 100% precision and 100% recall. The single false positive
-is a healthy order whose bank narration quotes no reference at all, so no tier
-can attribute it, and none should.
+injection time and the pipeline never reads. Every injected fault type scores
+100% precision and 100% recall across all ten of them.
 
 ## Money, not just order counts
 
@@ -48,14 +51,16 @@ unaccounted for, and where. Figures below are the no-key run; total exposure is
 the same either way, only the confirmed split moves.
 
 ```
-Total exposure:        635,548.23
-Confirmed in bank:     255,896.12   (40.26% by value)
-At risk:               379,652.11
+Total exposure:        664,425.15
+Confirmed in bank:     242,514.62   (36.5% by value)
+At risk:               421,910.53
   fee_footing_mismatch          88,397.13
   duplicate_settlement          75,769.24
   no_settlement_found           64,511.08
   bank_credit_delayed           52,592.63
   credit_unattributed           43,868.63
+  no_ledger_entry               28,876.92
+  settlement_reversed           13,381.50
   ... 4 more codes
 [OK] total_exposure == confirmed_value + at_risk_value  (residual 0.00)
 ```
@@ -69,6 +74,50 @@ The identity is enforced, not summarised. Exposure is `settled_amount` where a
 settlement exists, and the ledger amount where none does, since booked revenue
 with no payout is exactly the amount at stake. A non-zero residual means the
 report is lying about where money went, so it prints as a failure.
+
+## Triage: who fixes what
+
+Thirty-five exception rows is a list, not a plan. Finding breaks is half the
+loop; the other half is knowing which are the same problem, who owns each, and
+what order to work them in.
+
+```
+35 exception rows cluster into 12 incidents, 10 above the materiality
+threshold of 3,322.13 (0.5% of total exposure, floored at 1,000.00)
+
+owner                incidents  orders   value at risk
+razorpay_support             6      19      238,198.35
+merchant_finance             4      10      117,738.05
+bank_ops                     1       5       52,592.63
+chargeback_ops               1       1       13,381.50
+
+1. [CRITICAL] no_ledger_entry  28,876.92 across 2 order(s)
+   owner:  merchant_finance
+   action: Book the missing order. Money was received that the ledger
+           cannot explain, so revenue is understated until it is recorded.
+```
+
+Three ideas from finance operations drive it:
+
+- **Incidents, not rows.** Five orders failing `fee_footing_mismatch` with the
+  same implied fee error are one misconfigured fee, not five tickets.
+- **Ownership.** A footing error is Razorpay's to explain, an unreflected refund
+  is the merchant's to book, a delayed credit is the bank's to clear. Routing is
+  a property of the reason code, so it is a table, not a judgement.
+- **Materiality.** Auditors set a threshold below which a difference is not
+  worth chasing. Incidents under it are still reported, still counted, still in
+  the money identity. They are marked as not worth a human today, which is a
+  recommendation a controller can overrule, not a number that disappears.
+
+Consequence outranks size: unrecorded revenue ranks above a larger delayed
+credit, because a late credit that arrived is not the same kind of problem as
+money the books never saw.
+
+**No model is involved.** Routing is a lookup, clustering is a signature, and
+priority is arithmetic on money already computed. That is the same judgement as
+Tiers 1 and 2 of the narration matcher, one layer up. And like every other
+proposal here, a remediation is a suggestion with its evidence attached: nothing
+edits a ledger, posts an entry, or closes anything.
 
 ## Where the AI is, and where it is not
 
@@ -158,7 +207,7 @@ exact reason-code accuracy 100.00% | money identity holds
 
 ## How it is tested
 
-130 tests at 98% line coverage, four kinds:
+143 tests at 98% line coverage, four kinds:
 
 - **`test_stress.py`**, 29 adversarial cases written to break the pipeline. The
   bar for each: do not crash, do not silently invent a match.
@@ -176,18 +225,28 @@ the only code guaranteed to run during a live demo.
 
 The first version reported **65.45%**. It was wrong, and the fixes cost points.
 
-1. **The match rate double-counted.** It scored Stage A alone, so five orders
+1. **A settlement for an unbooked order vanished entirely.** Stage A iterated
+   the ledger, so an order Razorpay settled and the merchant never recorded got
+   no verdict at all. A batch containing one read as 100% reconciled with zero
+   exceptions while real money sat unaccounted for. It is the mirror of
+   `no_settlement_found` and the more dangerous of the two, because the failure
+   was silent and flattering. The order universe is now both sides.
+2. **A chargeback reversal was invisible.** Debits were correctly excluded from
+   matching and then discarded. A settlement could match on Monday, be clawed
+   back on Tuesday, and still be reported as reconciled money the merchant does
+   not have. Now `settlement_reversed`.
+3. **The match rate double-counted.** It scored Stage A alone, so five orders
    were counted as matched *and* listed as exceptions. Strictly three-way now,
    and the number fell.
-2. **"Razorpay settled, money never arrived" was invisible.** Stage B iterated
+4. **"Razorpay settled, money never arrived" was invisible.** Stage B iterated
    bank rows, so a settlement with no bank row produced no verdict at all rather
    than an exception. It now iterates settlements.
-3. **A blank amount came out `matched`.** `abs(nan - x) > tol` is `False`, so
+5. **A blank amount came out `matched`.** `abs(nan - x) > tol` is `False`, so
    NaN defeated every tolerance check in the file. Silent, present since the
    first version, under 60 passing tests, and it produced exactly what this
    design exists to prevent: a match nobody verified. Found by an adversarial
    case, not by a green suite.
-4. **A test asserted a capability the model does not have.** The LLM tier was
+6. **A test asserted a capability the model does not have.** The LLM tier was
    stubbed with the correct reference looked up from the settlement table, the
    answer key it is deliberately never shown. It passed. The first live call
    resolved zero, correctly, because the narration quoted no reference at all.
@@ -206,13 +265,14 @@ src/matcher.py               Stage A + Stage B, fully deterministic
 src/fuzzy_resolver.py        Tier 2, string recovery, zero LLM calls
 src/llm_resolver.py          Tier 3, the model proposes, never confirms
 src/money.py                 value reconciliation + the accounting identity
+src/triage.py                incident clustering, routing, materiality
 src/reconcile.py             orchestrator, tier order, source degradation
 src/evaluate.py              ground-truth scoring + tier ablation
 src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log, one run_id per run
 data/generate_synthetic.py   primary batch + ground_truth.csv answer key
 data/generate_alt_format.py  alt-convention batch
-tests/                       130 tests, 98% line coverage
+tests/                       143 tests, 98% line coverage
 ```
 
 Outputs land in `output/`: the report, the evaluation, and `audit_trail.jsonl`,

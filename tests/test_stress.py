@@ -87,11 +87,23 @@ def test_ledger_with_no_settlements_at_all(build):
 
 
 def test_settlements_with_no_ledger_at_all(build):
-    """Razorpay reports payouts for orders the merchant has never heard of."""
+    """
+    Razorpay reports payouts for orders the merchant has never heard of. This
+    is money received that the books cannot explain, so every one must be
+    reported. An earlier version iterated the ledger only, so these produced no
+    verdict at all and a batch containing them read as fully reconciled.
+    """
     report = build([], [stl(order_id=f"order_{i}", settlement_id=f"stl_{i}",
                             utr=f"UTR90000{i}") for i in range(5)], [])
-    assert report["total_orders"] == 0
+    assert report["total_orders"] == 5
     assert report["match_rate_pct"] == 0.0
+    assert report["unreconciled_orders"] == 5
+    # every one is flagged on the ledger side as never booked; this fixture has
+    # no bank rows either, so each also carries a settlement_not_credited record
+    ledger_side = {e["order_id"] for e in report["exceptions"]
+                   if e["reason_code"] == "no_ledger_entry"}
+    assert len(ledger_side) == 5
+    assert report["money"]["at_risk_value"] > 0
 
 
 # --------------------------------------------------------------- dirty values
@@ -134,10 +146,16 @@ def test_enormous_amount_keeps_precision(build):
 
 
 def test_whitespace_and_case_in_identifiers(build):
+    """
+    " order_1 " and "order_1" are not joined. That is defensible (silently
+    trimming ids would be its own risk), but it must surface as two findings
+    rather than one silent miss, and the arithmetic must still close.
+    """
     report = build([led(order_id=" order_1 ")], [stl(order_id="order_1")], [bnk()])
-    # it may or may not match, but it must never crash or double-count
     assert report["reconciled_orders"] + report["unreconciled_orders"] == \
         report["total_orders"]
+    assert sorted(e["reason_code"] for e in report["exceptions"]) == [
+        "no_ledger_entry", "no_settlement_found"]
 
 
 def test_lowercase_utr_in_narration_still_resolves(build):

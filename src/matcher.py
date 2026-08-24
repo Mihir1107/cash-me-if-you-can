@@ -110,6 +110,25 @@ def match_ledger_to_settlement(ledger_df, settlement_df):
     for _, row in ledger_df.iterrows():
         ledger_by_order.setdefault(row["order_id"], []).append(row)
 
+    # Razorpay can settle an order the merchant never booked. Iterating the
+    # ledger alone made that money invisible: no Stage A verdict, so it never
+    # reached the report at all, and a batch containing one still read as 100%
+    # reconciled. It is the mirror image of no_settlement_found, and it is the
+    # more dangerous of the two, because the failure is silent and flattering.
+    for oid in settlement_by_order:
+        if oid in ledger_by_order:
+            continue
+        rows = settlement_by_order[oid]
+        total = sum(_num(r, "settled_amount") or 0.0 for r in rows)
+        results.append(MatchResult(
+            order_id=oid, stage="ledger_settlement", status="exception",
+            reason_code="no_ledger_entry",
+            basis=(f"Razorpay settled {round(total, 2)} for this order but the "
+                   f"merchant's ledger has no entry for it"),
+            detail={"settlement_ids": [str(r["settlement_id"]) for r in rows],
+                    "settled_amount": round(total, 2)},
+        ))
+
     for oid, ledger_rows in ledger_by_order.items():
         if len(ledger_rows) > 1:
             results.append(MatchResult(
@@ -334,8 +353,20 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
     results = []
 
     known_utrs = {row["utr"] for _, row in settlement_df.iterrows()}
-    bank_by_utr, unresolved, _non_credits = link_bank_rows(
+    bank_by_utr, unresolved, non_credits = link_bank_rows(
         bank_df, known_utrs, extra_links)
+
+    # A debit quoting a settlement's own reference is that settlement being
+    # clawed back: a chargeback, a reversal, a recall. Filtering non-credits out
+    # of matching is right, but discarding them was not. Without this, a
+    # settlement could match cleanly on Monday, be reversed on Tuesday, and
+    # still be reported as reconciled money the merchant does not have.
+    reversals_by_utr = {}
+    debit_index = build_utr_index(known_utrs)
+    for row in non_credits:
+        utr = extract_utr_from_narration(row["narration"], index=debit_index)
+        if utr is not None:
+            reversals_by_utr.setdefault(utr, []).append(row)
 
     # Razorpay pays out a batch of settlements under one UTR; group accordingly.
     batches = {}
@@ -367,6 +398,23 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None):
 
         expected = round(sum(leg_amounts), 2)
         credits = bank_by_utr.get(utr, [])
+        reversals = reversals_by_utr.get(utr, [])
+
+        if reversals:
+            reversed_total = round(
+                sum(_num(r, "amount") or 0.0 for r in reversals), 2)
+            for oid in order_ids:
+                results.append(MatchResult(
+                    order_id=oid, stage="settlement_bank", status="exception",
+                    reason_code="settlement_reversed",
+                    basis=(f"{len(reversals)} debit(s) totalling {reversed_total} "
+                           f"quote settlement UTR {utr} — money was credited and "
+                           f"then taken back"),
+                    detail={"utr": utr, "reversed_amount": reversed_total,
+                            "reversal_txn_ids": [str(r["txn_id"]) for r in reversals],
+                            "settled_total": expected},
+                ))
+            continue
 
         if not credits:
             # Two very different problems wear the same face here, and a
