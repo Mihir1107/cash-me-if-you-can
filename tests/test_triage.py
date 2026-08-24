@@ -190,3 +190,53 @@ def test_triage_never_claims_to_have_fixed_anything(workspace):
 
 def test_triage_is_absent_rather_than_wrong_without_exposure_data():
     assert build_triage_report([], {}, 0.0)["incidents"] == []
+
+
+def test_identical_shortfalls_cluster_as_one_deduction():
+    """
+    Two payouts short by exactly the same amount are one deduction applied
+    twice, not two coincidences. Clustering per order would have split a
+    systemic pattern into small change and buried it below the threshold twice.
+    """
+    exceptions = [
+        exc("order_1", "bank_amount_mismatch", stage="settlement_bank",
+            settled_total=1122.99, bank_amount=872.99),
+        exc("order_2", "bank_amount_mismatch", stage="settlement_bank",
+            settled_total=2196.27, bank_amount=1946.27),
+    ]
+    incidents = build_incidents(
+        exceptions, exposure(order_1=1122.99, order_2=2196.27), 100_000.0)
+
+    assert len(incidents) == 1
+    assert incidents[0]["order_count"] == 2
+    assert incidents[0]["signature"] == "short_by_250.0"
+
+
+def test_different_shortfalls_stay_separate():
+    """Control: clustering must find a pattern, not manufacture one."""
+    exceptions = [
+        exc("order_1", "bank_amount_mismatch", stage="settlement_bank",
+            settled_total=1000.0, bank_amount=750.0),
+        exc("order_2", "bank_amount_mismatch", stage="settlement_bank",
+            settled_total=2000.0, bank_amount=1100.0),
+    ]
+    incidents = build_incidents(
+        exceptions, exposure(order_1=1000.0, order_2=2000.0), 100_000.0)
+    assert len(incidents) == 2
+
+
+def test_immaterial_incidents_print_in_their_own_section(capsys, workspace):
+    """
+    Materiality outranks urgency, so a HIGH can rank below a LOW. Mixed into one
+    numbered list that reads as a sorting bug, so they get their own section.
+    """
+    from src.triage import print_triage
+
+    data, out = workspace
+    report, _ = run_reconciliation(data_dir=str(data), output_dir=str(out))
+    print_triage(report["triage"])
+    printed = capsys.readouterr().out
+
+    if report["triage"]["material_incident_count"] < report["triage"]["incident_count"]:
+        assert "Below the materiality threshold" in printed
+        assert "Still reported, still counted" in printed

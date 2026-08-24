@@ -11,7 +11,7 @@ queue saying who fixes what.
 pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 143 tests
+python -m pytest tests/ -q       # 146 tests
 ```
 
 Set `OPENAI_API_KEY` to enable the LLM tier. Without it the pipeline still runs
@@ -24,25 +24,29 @@ audit trail.
 
 ## Results
 
-| | no API key |
-|---|---|
-| Match rate (3-way confirmed) | 38.60% |
-| Injected faults detected | **32 / 32** |
-| Missed faults | **0** |
-| False positives | 3 |
-| Reason-code accuracy | 94.74% |
+| | no API key | with API key |
+|---|---|---|
+| Match rate (3-way confirmed) | 38.60% | **42.11%** |
+| Injected faults detected | **32 / 32** | **32 / 32** |
+| Missed faults | **0** | **0** |
+| False positives | 3 | 1 |
+| Reason-code accuracy | 94.74% | **98.25%** |
+| Fault detection precision | 91.43% | **96.97%** |
+| Recall | **100%** | **100%** |
 
-With `OPENAI_API_KEY` set, the LLM tier resolves two more narrations and both
-figures improve. The table above is the weakest honest configuration, which is
-what a clone without credentials reproduces exactly.
+The no-key column is what a clone without credentials reproduces exactly. A
+missing key costs the headline number 3.51 points, which is the degradation
+being real rather than cosmetic.
 
 The match rate is deliberately not 95%. The generator injects real failure modes
 on purpose, so the exception list means something. The number that measures the
 *agent* is 29/29 with zero misses; the match rate measures the *data*.
 
 Verified against `data/ground_truth.csv`, which the generator writes at
-injection time and the pipeline never reads. Every injected fault type scores
-100% precision and 100% recall across all ten of them.
+injection time and the pipeline never reads. **All ten injected fault types
+score 100% precision and 100% recall.** The single false positive is a healthy
+order whose narration quotes no reference at all, so no tier can attribute it,
+and none should.
 
 ## Money, not just order counts
 
@@ -52,16 +56,17 @@ the same either way, only the confirmed split moves.
 
 ```
 Total exposure:        664,425.15
-Confirmed in bank:     242,514.62   (36.5% by value)
-At risk:               421,910.53
+Confirmed in bank:     264,713.45   (39.84% by value)
+At risk:               399,711.70
   fee_footing_mismatch          88,397.13
   duplicate_settlement          75,769.24
   no_settlement_found           64,511.08
   bank_credit_delayed           52,592.63
-  credit_unattributed           43,868.63
+  refund_not_reflected          41,518.23
   no_ledger_entry               28,876.92
+  credit_unattributed           21,669.80
   settlement_reversed           13,381.50
-  ... 4 more codes
+  ... 3 more codes
 [OK] total_exposure == confirmed_value + at_risk_value  (residual 0.00)
 ```
 
@@ -82,11 +87,11 @@ loop; the other half is knowing which are the same problem, who owns each, and
 what order to work them in.
 
 ```
-35 exception rows cluster into 12 incidents, 10 above the materiality
+35 exception rows cluster into 11 incidents, 10 above the materiality
 threshold of 3,322.13 (0.5% of total exposure, floored at 1,000.00)
 
 owner                incidents  orders   value at risk
-razorpay_support             6      19      238,198.35
+razorpay_support             5      19      238,198.35
 merchant_finance             4      10      117,738.05
 bank_ops                     1       5       52,592.63
 chargeback_ops               1       1       13,381.50
@@ -96,6 +101,12 @@ chargeback_ops               1       1       13,381.50
    action: Book the missing order. Money was received that the ledger
            cannot explain, so revenue is understated until it is recorded.
 ```
+
+Clustering finds patterns rather than manufacturing them. Two payouts short by
+exactly 250.00 are one deduction applied twice, so they become a single incident
+and their combined value is compared against the threshold once. Split per order
+they would have been two pieces of small change, below the threshold twice, and
+the pattern invisible.
 
 Three ideas from finance operations drive it:
 
@@ -144,7 +155,7 @@ Three constraints make that boundary real:
 2. **A confident proposal naming a reference no settlement carries is
    discarded**, however certain the model is.
 3. **No API key degrades the system, it does not make it lie.** The match rate
-   drops by 3.63 points.
+   drops by 3.51 points.
 
 And the case that matters most, because it is the one the architecture exists
 for: **a tier being confidently wrong cannot produce a false match.** Feed the
@@ -159,9 +170,9 @@ covers this at every confidence level up to certainty.
 
 | Configuration | Match rate | Resolved by fuzzy | Resolved by LLM |
 |---|---|---|---|
-| regex only | 32.73% | 0 | 0 |
-| + fuzzy (zero LLM calls) | 41.82% | 5 | 0 |
-| + LLM tier | **45.45%** | 5 | 2 |
+| regex only | 29.82% | 0 | 0 |
+| + fuzzy (zero LLM calls) | 38.60% | 5 | 0 |
+| + LLM tier | **42.11%** | 5 | 2 |
 
 The free deterministic tier does 5 of 7 mangled narrations. The model is scoped
 to the 2 that genuinely need language: narrations quoting *two* real references,
@@ -186,8 +197,8 @@ under a cent.
 | 500 | 52.1 ms | 18,320 | 214 / 214 | 0 |
 | 5,000 | 543.3 ms | 17,632 | 2,089 / 2,089 | 0 |
 
-With Tier 3 on, the same batch takes 5,394 ms, of which 5,368 ms is three API
-calls. The entire deterministic pipeline is the remaining 26 ms. Every narration
+With Tier 3 on, the same batch takes 8,179 ms, of which 8,156 ms is three API
+calls. The entire deterministic pipeline is the remaining 23 ms. Every narration
 absorbed by Tiers 1 and 2 is roughly 2,000x cheaper in latency, not just in
 money.
 
@@ -207,7 +218,7 @@ exact reason-code accuracy 100.00% | money identity holds
 
 ## How it is tested
 
-143 tests at 98% line coverage, four kinds:
+146 tests at 98% line coverage, four kinds:
 
 - **`test_stress.py`**, 29 adversarial cases written to break the pipeline. The
   bar for each: do not crash, do not silently invent a match.
@@ -272,7 +283,7 @@ src/report.py                three-way match rate, exception list
 src/audit.py                 append-only decision log, one run_id per run
 data/generate_synthetic.py   primary batch + ground_truth.csv answer key
 data/generate_alt_format.py  alt-convention batch
-tests/                       143 tests, 98% line coverage
+tests/                       146 tests, 98% line coverage
 ```
 
 Outputs land in `output/`: the report, the evaluation, and `audit_trail.jsonl`,

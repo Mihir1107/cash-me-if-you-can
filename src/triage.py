@@ -82,7 +82,7 @@ POLICY = {
         "urgency": "high",
         "action": "Reconcile the payout against the credit. The bank moved a "
                   "different amount from the one the settlement reports.",
-        "cluster": "per_order",
+        "cluster": "shortfall_delta",
     },
     "refund_not_reflected": {
         "owner": "merchant_finance",
@@ -198,6 +198,16 @@ def _signature(exception, strategy):
             return "unknown_fee_shape"
         return f"fee_ratio_{round((fee + (tax or 0.0)) / fee, 1)}"
 
+    if strategy == "shortfall_delta":
+        # Two payouts short by the same amount are one deduction being applied
+        # twice, not two coincidences. Clustering on the delta surfaces that;
+        # clustering per order would have hidden it as unrelated small change.
+        detail = exception.get("detail") or {}
+        settled, bank = detail.get("settled_total"), detail.get("bank_amount")
+        if settled is None or bank is None:
+            return "unknown_shortfall"
+        return f"short_by_{round(settled - bank, 2)}"
+
     if strategy == "delay_bucket":
         detail = exception.get("detail") or {}
         gap = detail.get("date_gap_days")
@@ -308,18 +318,38 @@ def print_triage(triage):
     for owner, stats in triage["by_owner"].items():
         print(f"{owner:<20}{stats['incidents']:>10}{stats['orders']:>8}"
               f"{stats['value_at_risk']:>16,.2f}")
-    print("-" * 62)
-    print("Work queue, most consequential first:")
-    for n, incident in enumerate(triage["incidents"], start=1):
-        flag = "" if incident["material"] else "   [below threshold]"
+    def show(n, incident):
         print(f"\n{n}. [{incident['urgency'].upper()}] {incident['reason_code']}"
               f"  {incident['value_at_risk']:,.2f} across "
-              f"{incident['order_count']} order(s){flag}")
+              f"{incident['order_count']} order(s)")
         print(f"   owner:  {incident['owner']}")
         print(f"   action: {incident['recommended_action']}")
         shown = ", ".join(incident["order_ids"][:4])
         more = (f" (+{len(incident['order_ids']) - 4} more)"
                 if len(incident["order_ids"]) > 4 else "")
         print(f"   orders: {shown}{more}")
+
+    material = [i for i in triage["incidents"] if i["material"]]
+    immaterial = [i for i in triage["incidents"] if not i["material"]]
+
+    print("-" * 62)
+    print("Work queue, most consequential first:")
+    for n, incident in enumerate(material, start=1):
+        show(n, incident)
+
+    # Kept in a section of their own. Materiality outranks urgency, so mixing
+    # these into the numbered queue puts a HIGH below a LOW and reads as a
+    # sorting bug rather than as the deliberate judgement it is.
+    if immaterial:
+        print()
+        print("-" * 62)
+        print(f"Below the materiality threshold of "
+              f"{triage['materiality_threshold']:,.2f}, "
+              f"{triage['value_below_threshold']:,.2f} in total.")
+        print("Still reported, still counted, still inside the money identity.")
+        print("Not worth a controller's day unless they decide otherwise.")
+        for n, incident in enumerate(immaterial, start=len(material) + 1):
+            show(n, incident)
+
     print("=" * 62)
     print(triage["note"])

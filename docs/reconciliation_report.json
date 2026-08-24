@@ -47,7 +47,7 @@
   },
   "triage": {
     "exception_rows": 35,
-    "incident_count": 12,
+    "incident_count": 11,
     "material_incident_count": 10,
     "materiality_threshold": 3322.13,
     "materiality_basis": "0.5% of total exposure, floored at 1,000.00",
@@ -55,7 +55,7 @@
     "value_below_threshold": 3319.26,
     "by_owner": {
       "razorpay_support": {
-        "incidents": 6,
+        "incidents": 5,
         "orders": 19,
         "value_at_risk": 238198.35
       },
@@ -251,30 +251,16 @@
       },
       {
         "reason_code": "bank_amount_mismatch",
-        "signature": "order_000032",
+        "signature": "short_by_250.0",
         "owner": "razorpay_support",
         "urgency": "high",
         "recommended_action": "Reconcile the payout against the credit. The bank moved a different amount from the one the settlement reports.",
-        "order_count": 1,
-        "value_at_risk": 2196.27,
+        "order_count": 2,
+        "value_at_risk": 3319.26,
         "material": false,
         "order_ids": [
+          "order_000008",
           "order_000032"
-        ],
-        "sample_basis": "bank credited 1946.27 vs settlement total 2196.27 (single settlement)",
-        "routed_by_policy": true
-      },
-      {
-        "reason_code": "bank_amount_mismatch",
-        "signature": "order_000008",
-        "owner": "razorpay_support",
-        "urgency": "high",
-        "recommended_action": "Reconcile the payout against the credit. The bank moved a different amount from the one the settlement reports.",
-        "order_count": 1,
-        "value_at_risk": 1122.99,
-        "material": false,
-        "order_ids": [
-          "order_000008"
         ],
         "sample_basis": "bank credited 872.99 vs settlement total 1122.99 (single settlement)",
         "routed_by_policy": true
@@ -283,20 +269,20 @@
     "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
   },
   "throughput": {
-    "wall_clock_ms": 9.66,
+    "wall_clock_ms": 7.98,
     "orders": 55,
     "bank_rows": 50,
     "records_processed": 105,
-    "records_per_second": 10869.6,
+    "records_per_second": 13157.9,
     "llm_calls": 0,
     "llm_calls_per_100_orders": 0.0,
     "stage_ms": {
-      "load_sources": 1.25,
-      "stage_a_ledger_settlement": 1.6,
-      "tier1_narration_regex": 0.82,
-      "tier2_narration_fuzzy": 0.42,
-      "tier3_narration_llm": 0.02,
-      "stage_b_settlement_bank": 2.59
+      "load_sources": 0.79,
+      "stage_a_ledger_settlement": 1.44,
+      "tier1_narration_regex": 0.74,
+      "tier2_narration_fuzzy": 0.38,
+      "tier3_narration_llm": 0.01,
+      "stage_b_settlement_bank": 2.47
     }
   },
   "bank_source_error": null,
