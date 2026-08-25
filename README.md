@@ -82,17 +82,17 @@ report is lying about where money went, so it prints as a failure.
 
 ## Triage: who fixes what
 
-Thirty-five exception rows is a list, not a plan. Finding breaks is half the
+Thirty-three exception rows is a list, not a plan. Finding breaks is half the
 loop; the other half is knowing which are the same problem, who owns each, and
 what order to work them in.
 
 ```
-35 exception rows cluster into 11 incidents, 10 above the materiality
+33 exception rows cluster into 11 incidents, 10 above the materiality
 threshold of 3,322.13 (0.5% of total exposure, floored at 1,000.00)
 
 owner                incidents  orders   value at risk
 razorpay_support             5      19      238,198.35
-merchant_finance             4      10      117,738.05
+merchant_finance             4       8       95,539.22
 bank_ops                     1       5       52,592.63
 chargeback_ops               1       1       13,381.50
 
