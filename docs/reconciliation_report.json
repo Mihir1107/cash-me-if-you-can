@@ -269,20 +269,20 @@
     "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
   },
   "throughput": {
-    "wall_clock_ms": 8.56,
+    "wall_clock_ms": 7.75,
     "orders": 57,
     "bank_rows": 50,
     "records_processed": 107,
-    "records_per_second": 12500.0,
+    "records_per_second": 13806.5,
     "llm_calls": 0,
     "llm_calls_per_100_orders": 0.0,
     "stage_ms": {
-      "load_sources": 1.06,
-      "stage_a_ledger_settlement": 1.45,
-      "tier1_narration_regex": 0.79,
-      "tier2_narration_fuzzy": 0.41,
+      "load_sources": 1.12,
+      "stage_a_ledger_settlement": 1.46,
+      "tier1_narration_regex": 0.73,
+      "tier2_narration_fuzzy": 0.38,
       "tier3_narration_llm": 0.01,
-      "stage_b_settlement_bank": 1.83
+      "stage_b_settlement_bank": 1.72
     }
   },
   "bank_source_error": null,

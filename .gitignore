@@ -22,3 +22,6 @@ env/
 .DS_Store
 .idea/
 .vscode/
+
+# Personal pitch notes, not part of the submission
+PITCH_SCRIPT.txt
