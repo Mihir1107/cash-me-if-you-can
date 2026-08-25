@@ -25,4 +25,4 @@ env/
 .vscode/
 
 # Personal pitch notes, not part of the submission
-PITCH_SCRIPT.txt
+PITCH_SCRIPT.md
