@@ -26,6 +26,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
 from src.evaluate import print_evaluation, run_evaluation  # noqa: E402
 from src.report import print_summary  # noqa: E402
 

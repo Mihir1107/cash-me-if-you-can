@@ -13,6 +13,17 @@ Entry point.
 
 import sys
 
+# Loaded here, at the entry point, and deliberately NOT in src/. Tests import
+# src directly and must never pick up a real key: a suite that quietly starts
+# making network calls is slow, costs money, and stops giving the same answer
+# twice. Keeping the load out of the package is what guarantees that.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass  # optional; the pipeline degrades honestly without a key
+
 from src.reconcile import run_reconciliation
 from src.report import print_summary
 
@@ -52,7 +63,6 @@ if __name__ == "__main__":
             if incident.get("brief_rejected_numbers"):
                 print(f"  -- draft REJECTED, invented: "
                       f"{incident['brief_rejected_numbers']}")
-        print("=" * 62)
 
     print_summary(report)
     print("\nFull audit trail: output/audit_trail.jsonl")

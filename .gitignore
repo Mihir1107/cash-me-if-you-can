@@ -6,6 +6,7 @@ output/*
 # no key is ever written to a file in this repo.
 .env
 .env.*
+!.env.example
 *.pem
 credentials.json
 

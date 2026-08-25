@@ -53,6 +53,8 @@ Rules you must not break:
 date or an order id that is not in the facts.
 - Quote every figure exactly as it appears. Do not round, abbreviate or \
 convert.
+- Write amounts as bare numbers, exactly as given. Do NOT add a currency \
+symbol or a currency name. The facts carry no currency and neither should you.
 - Do not speculate about causes beyond what the facts state.
 - Do not claim anything has been fixed, booked or resolved.
 
@@ -64,6 +66,14 @@ class IncidentBrief(BaseModel):
 
 
 NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+# A currency the facts never stated is a fabrication like any other, and a
+# worse one than most: a live run had the model write "$13381.5" for an amount
+# in rupees, which is wrong by roughly the exchange rate. The number guard let
+# it through because the digits were right. This does not.
+CURRENCY_RE = re.compile(
+    r"[$€£¥₩₽]|\b(?:USD|EUR|GBP|JPY|dollars?|euros?|pounds?|cents?)\b",
+    re.IGNORECASE)
 
 
 def _numbers_in(text):
@@ -107,13 +117,24 @@ def allowed_numbers(facts):
 
 def verify_brief(text, facts):
     """
-    Returns (ok, invented) where invented is the sorted list of numbers the
-    model wrote that were not in its input. This is the gate: a brief that
-    invents a figure is discarded, however well written it is.
+    Returns (ok, invented) where invented lists everything the model introduced
+    that was not in its input: numbers first, then any currency it named.
+
+    This is the gate. A brief that invents a figure is discarded however well
+    written it is, and a brief that invents a currency is discarded for the same
+    reason. The facts state amounts as bare numbers because the pipeline does
+    not know or care which currency they are in; a brief that decides they are
+    dollars has added a fact nobody established.
     """
     permitted = allowed_numbers(facts)
     invented = sorted(n for n in _numbers_in(text) if n not in permitted)
-    return (not invented), invented
+
+    fact_text = str(facts)
+    currencies = sorted({
+        m.group(0) for m in CURRENCY_RE.finditer(text)
+        if not CURRENCY_RE.search(fact_text)
+    })
+    return (not invented and not currencies), invented + currencies
 
 
 def incident_facts(incident):

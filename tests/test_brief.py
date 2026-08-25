@@ -181,3 +181,37 @@ def test_drafting_is_capped_so_the_queue_cannot_run_up_a_bill(monkeypatch):
 def test_attach_briefs_tolerates_an_empty_triage():
     assert attach_briefs({}) == {}
     assert attach_briefs({"incidents": []})["incidents"] == []
+
+
+# --------------------------------------------- currency, found in a live run
+
+@pytest.mark.parametrize("text,flagged", [
+    ("Two orders putting $28876.92 at risk.", "$"),
+    ("Two orders worth 28,876.92 dollars.", "dollars"),
+    ("Two orders worth €28,876.92.", "€"),
+    ("A shortfall of 28,876.92 USD.", "USD"),
+])
+def test_an_invented_currency_is_caught(text, flagged):
+    """
+    The first live run of this feature had the model write "$13381.5" for an
+    amount in rupees. The number guard passed it, because the digits were right.
+    A finance brief off by an exchange rate is worse than a dull one, and the
+    facts state amounts as bare numbers precisely because the pipeline does not
+    know which currency they are.
+    """
+    ok, invented = verify_brief(text, FACTS)
+    assert not ok
+    assert flagged in invented
+
+
+def test_bare_numbers_are_still_accepted():
+    ok, invented = verify_brief(
+        "Two orders totalling 28,876.92 need booking.", FACTS)
+    assert ok and invented == []
+
+
+def test_a_currency_the_facts_themselves_state_is_not_an_invention():
+    """The guard flags what the model added, not what it was given."""
+    facts = dict(FACTS, one_example_finding="Razorpay settled 14000.00 USD")
+    ok, _ = verify_brief("A shortfall of 14,000.00 USD.", facts)
+    assert ok

@@ -1,23 +1,23 @@
 {
-  "match_rate_pct": 38.6,
+  "match_rate_pct": 42.11,
   "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank",
   "scoring": {
     "orders_scored": 57,
-    "exact_label_accuracy": 0.9474,
+    "exact_label_accuracy": 0.9825,
     "fault_detection": {
       "injected_faults": 32,
       "detected": 32,
-      "false_positives": 3,
+      "false_positives": 1,
       "missed": 0,
-      "precision": 0.9143,
+      "precision": 0.9697,
       "recall": 1.0,
       "recall_ci95": [
         0.8928,
         1.0
       ],
       "precision_ci95": [
-        0.7762,
-        0.9704
+        0.8468,
+        0.9946
       ],
       "sample_note": "95% Wilson intervals. These are estimates from the injected faults; the match rate is a census and carries no interval."
     },
@@ -44,9 +44,9 @@
       },
       "credit_unattributed": {
         "support": 0,
-        "predicted": 3,
+        "predicted": 1,
         "true_positives": 0,
-        "false_positives": 3,
+        "false_positives": 1,
         "false_negatives": 0,
         "precision": 0.0,
         "recall": 0.0,
@@ -84,13 +84,13 @@
       },
       "matched": {
         "support": 25,
-        "predicted": 22,
-        "true_positives": 22,
+        "predicted": 24,
+        "true_positives": 24,
         "false_positives": 0,
-        "false_negatives": 3,
+        "false_negatives": 1,
         "precision": 1.0,
-        "recall": 0.88,
-        "f1": 0.9362
+        "recall": 0.96,
+        "f1": 0.9796
       },
       "no_ledger_entry": {
         "support": 2,
@@ -157,8 +157,8 @@
         "bank_credit_delayed": 5
       },
       "matched": {
-        "matched": 22,
-        "credit_unattributed": 3
+        "matched": 24,
+        "credit_unattributed": 1
       },
       "bank_amount_mismatch": {
         "bank_amount_mismatch": 2
@@ -181,17 +181,7 @@
     },
     "misclassified": [
       {
-        "order_id": "order_000009",
-        "expected": "matched",
-        "predicted": "credit_unattributed"
-      },
-      {
         "order_id": "order_000023",
-        "expected": "matched",
-        "predicted": "credit_unattributed"
-      },
-      {
-        "order_id": "order_000033",
         "expected": "matched",
         "predicted": "credit_unattributed"
       }
@@ -216,7 +206,11 @@
     },
     {
       "config": "+ LLM tier",
-      "skipped": "no OPENAI_API_KEY set"
+      "match_rate_pct": 42.11,
+      "reconciled_orders": 24,
+      "resolved_by_fuzzy": 5,
+      "resolved_by_llm": 2,
+      "unresolved_narrations": 1
     }
   ]
 }

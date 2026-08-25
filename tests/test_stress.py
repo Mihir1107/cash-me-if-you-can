@@ -10,6 +10,7 @@ Producing an exception is a pass. Producing a wrong match is a failure.
 """
 
 import csv
+import os
 
 import pandas as pd
 import pytest
@@ -313,3 +314,46 @@ def test_bank_statement_of_pure_noise(build):
     _, unreconciled = matched_orders(report)
     assert "order_1" in unreconciled
     assert report["reconciled_orders"] == 0
+
+
+# ------------------------------------------------- secret handling
+
+def test_importing_src_never_loads_a_dotenv_file(tmp_path, monkeypatch):
+    """
+    .env is read at the entry points, never inside src/. If importing the
+    package pulled a key in, the whole suite would start making real network
+    calls: slow, billed, and no longer deterministic. This pins that it cannot.
+    """
+    import importlib
+    import subprocess
+    import sys
+
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "import os, sys\n"
+        f"sys.path.insert(0, {str(pytest.__file__).rsplit('/', 3)[0]!r})\n"
+        "sys.path.insert(0, '.')\n"
+        "import src.llm_resolver, src.brief, src.reconcile\n"
+        "print('KEY' if os.environ.get('OPENAI_API_KEY') else 'NOKEY')\n"
+    )
+    env = {k: v for k, v in os.environ.items() if k != "OPENAI_API_KEY"}
+    result = subprocess.run([sys.executable, str(probe)], capture_output=True,
+                            text=True, cwd=".", env=env)
+    assert result.stdout.strip() == "NOKEY", result.stdout + result.stderr
+
+
+def test_no_secret_is_tracked_by_git():
+    """A key in the repo is the one mistake that cannot be undone by a commit."""
+    import subprocess
+
+    tracked = subprocess.run(["git", "ls-files"], capture_output=True,
+                             text=True).stdout.split()
+    assert ".env" not in tracked
+    assert not [f for f in tracked if f.endswith(".env")]
+
+    # and nothing key-shaped in any tracked file
+    grep = subprocess.run(
+        ["git", "grep", "-lE", r"sk-[A-Za-z0-9_-]{20,}", "--"] + tracked,
+        capture_output=True, text=True)
+    leaked = [f for f in grep.stdout.split() if f]
+    assert not leaked, f"key-shaped string in tracked files: {leaked}"

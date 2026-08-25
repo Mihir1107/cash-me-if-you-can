@@ -1,8 +1,8 @@
 {
   "total_orders": 57,
-  "reconciled_orders": 22,
-  "unreconciled_orders": 35,
-  "match_rate_pct": 38.6,
+  "reconciled_orders": 24,
+  "unreconciled_orders": 33,
+  "match_rate_pct": 42.11,
   "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank",
   "stages": {
     "ledger_settlement": {
@@ -10,34 +10,34 @@
       "exceptions": 22
     },
     "settlement_bank": {
-      "matched": 39,
-      "exceptions": 13
+      "matched": 41,
+      "exceptions": 11
     }
   },
   "narration_resolution": {
     "resolved_by_fuzzy_no_llm": 5,
-    "resolved_by_llm": 0,
-    "unresolved": 3
+    "resolved_by_llm": 2,
+    "unresolved": 1
   },
   "money": {
     "total_exposure": 664425.15,
-    "confirmed_value": 242514.62,
-    "at_risk_value": 421910.53,
-    "value_match_rate_pct": 36.5,
+    "confirmed_value": 264713.45,
+    "at_risk_value": 399711.7,
+    "value_match_rate_pct": 39.84,
     "at_risk_by_reason": {
       "fee_footing_mismatch": 88397.13,
       "duplicate_settlement": 75769.24,
       "no_settlement_found": 64511.08,
       "bank_credit_delayed": 52592.63,
-      "credit_unattributed": 43868.63,
       "refund_not_reflected": 41518.23,
       "no_ledger_entry": 28876.92,
+      "credit_unattributed": 21669.8,
       "settlement_reversed": 13381.5,
       "settlement_not_credited": 6201.64,
       "ledger_gross_amount_mismatch": 3474.27,
       "bank_amount_mismatch": 3319.26
     },
-    "unattributed_bank_credit_value": 43868.63,
+    "unattributed_bank_credit_value": 21669.8,
     "identity": {
       "holds": true,
       "residual": 0.0,
@@ -46,12 +46,12 @@
     "exposure_note": "exposure = settled_amount where a settlement exists, else the ledger amount (booked revenue with no payout)"
   },
   "triage": {
-    "exception_rows": 35,
+    "exception_rows": 33,
     "incident_count": 11,
     "material_incident_count": 10,
     "materiality_threshold": 3322.13,
     "materiality_basis": "0.5% of total exposure, floored at 1,000.00",
-    "value_above_threshold": 418591.27,
+    "value_above_threshold": 396392.44,
     "value_below_threshold": 3319.26,
     "by_owner": {
       "razorpay_support": {
@@ -61,8 +61,8 @@
       },
       "merchant_finance": {
         "incidents": 4,
-        "orders": 10,
-        "value_at_risk": 117738.05
+        "orders": 8,
+        "value_at_risk": 95539.22
       },
       "bank_ops": {
         "incidents": 1,
@@ -204,15 +204,13 @@
         "owner": "merchant_finance",
         "urgency": "medium",
         "recommended_action": "Attribute the credit by hand. The money is in the account; only the narration is unreadable.",
-        "order_count": 3,
-        "value_at_risk": 43868.63,
+        "order_count": 1,
+        "value_at_risk": 21669.8,
         "material": true,
         "order_ids": [
-          "order_000009",
-          "order_000023",
-          "order_000033"
+          "order_000023"
         ],
-        "sample_basis": "settlement UTR UTR100009 has no readable bank credit, but 1 unattributed credit(s) match the expected 17616.68 \u2014 narration unreadable, NOT matched on amount",
+        "sample_basis": "settlement UTR UTR100023 has no readable bank credit, but 1 unattributed credit(s) match the expected 21669.8 \u2014 narration unreadable, NOT matched on amount",
         "routed_by_policy": true
       },
       {
@@ -269,24 +267,24 @@
     "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
   },
   "throughput": {
-    "wall_clock_ms": 7.75,
+    "wall_clock_ms": 3881.09,
     "orders": 57,
     "bank_rows": 50,
     "records_processed": 107,
-    "records_per_second": 13806.5,
-    "llm_calls": 0,
-    "llm_calls_per_100_orders": 0.0,
+    "records_per_second": 27.6,
+    "llm_calls": 3,
+    "llm_calls_per_100_orders": 5.26,
     "stage_ms": {
-      "load_sources": 1.12,
-      "stage_a_ledger_settlement": 1.46,
-      "tier1_narration_regex": 0.73,
-      "tier2_narration_fuzzy": 0.38,
-      "tier3_narration_llm": 0.01,
-      "stage_b_settlement_bank": 1.72
+      "load_sources": 1.27,
+      "stage_a_ledger_settlement": 1.53,
+      "tier1_narration_regex": 0.8,
+      "tier2_narration_fuzzy": 0.44,
+      "tier3_narration_llm": 3858.01,
+      "stage_b_settlement_bank": 9.93
     }
   },
   "bank_source_error": null,
-  "exception_count": 35,
+  "exception_count": 33,
   "exception_reason_counts": {
     "no_ledger_entry": 2,
     "duplicate_settlement": 5,
@@ -296,8 +294,8 @@
     "ledger_gross_amount_mismatch": 1,
     "bank_credit_delayed": 5,
     "bank_amount_mismatch": 2,
-    "credit_unattributed": 3,
     "settlement_not_credited": 2,
+    "credit_unattributed": 1,
     "settlement_reversed": 1
   },
   "exceptions": [
@@ -546,20 +544,6 @@
       "also_matched_in_stage_a": true
     },
     {
-      "order_id": "order_000009",
-      "stage": "settlement_bank",
-      "reason_code": "credit_unattributed",
-      "basis": "settlement UTR UTR100009 has no readable bank credit, but 1 unattributed credit(s) match the expected 17616.68 \u2014 narration unreadable, NOT matched on amount",
-      "detail": {
-        "utr": "UTR100009",
-        "expected_amount": 17616.68,
-        "candidate_txn_ids": [
-          "bnk_000008"
-        ]
-      },
-      "also_matched_in_stage_a": true
-    },
-    {
       "order_id": "order_000016",
       "stage": "settlement_bank",
       "reason_code": "bank_credit_delayed",
@@ -619,20 +603,6 @@
       "also_matched_in_stage_a": true
     },
     {
-      "order_id": "order_000033",
-      "stage": "settlement_bank",
-      "reason_code": "credit_unattributed",
-      "basis": "settlement UTR UTR100033 has no readable bank credit, but 1 unattributed credit(s) match the expected 4582.15 \u2014 narration unreadable, NOT matched on amount",
-      "detail": {
-        "utr": "UTR100033",
-        "expected_amount": 4582.15,
-        "candidate_txn_ids": [
-          "bnk_000028"
-        ]
-      },
-      "also_matched_in_stage_a": true
-    },
-    {
       "order_id": "order_000040",
       "stage": "settlement_bank",
       "reason_code": "bank_credit_delayed",
@@ -683,25 +653,11 @@
   ],
   "unattributed_bank_credits": [
     {
-      "txn_id": "bnk_000028",
-      "amount": 4582.15,
-      "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100033",
-      "reason_code": "narration_unresolved",
-      "basis": "LLM unavailable \u2014 no OPENAI_API_KEY set, routed to exception"
-    },
-    {
       "txn_id": "bnk_000020",
       "amount": 21669.8,
       "narration": "CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted",
       "reason_code": "narration_unresolved",
-      "basis": "LLM unavailable \u2014 no OPENAI_API_KEY set, routed to exception"
-    },
-    {
-      "txn_id": "bnk_000008",
-      "amount": 17616.68,
-      "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100009",
-      "reason_code": "narration_unresolved",
-      "basis": "LLM unavailable \u2014 no OPENAI_API_KEY set, routed to exception"
+      "basis": "LLM confidence 0.00 below threshold 0.7"
     }
   ],
   "audit_trail": {
@@ -715,7 +671,7 @@
   "close_gate": {
     "can_close": false,
     "blocker_count": 4,
-    "value_blocking_close": 504718.32,
+    "value_blocking_close": 460320.66,
     "conditions_checked": 7,
     "conditions_passed": [
       "audit_trail_intact",
@@ -743,9 +699,9 @@
       },
       {
         "condition": "cash_attributable",
-        "why": "43,868.63 of bank credits cannot be tied to any settlement, which is above the materiality threshold of 3,322.13.",
+        "why": "21,669.80 of bank credits cannot be tied to any settlement, which is above the materiality threshold of 3,322.13.",
         "action": "Attribute the credits by hand, or hold them in suspense and disclose.",
-        "value_at_risk": 43868.63,
+        "value_at_risk": 21669.8,
         "detail": {
           "threshold": 3322.13
         }
@@ -754,7 +710,7 @@
         "condition": "material_exceptions_resolved",
         "why": "10 incident(s) above the materiality threshold are still open.",
         "action": "Work the triage queue, or record a documented decision to accept each one.",
-        "value_at_risk": 418591.27,
+        "value_at_risk": 396392.44,
         "detail": {
           "incident_count": 10,
           "threshold": 3322.13

@@ -64,6 +64,11 @@ stubbed with the answer looked up from the settlement table, the key it is
 deliberately never shown. It passed. The first live call resolved zero,
 correctly, because that narration quoted no reference at all.
 
+That pattern repeated. Every feature here that touches the model has shipped a
+bug only a real API call could find: the brief guard checked numbers and passed
+`$13381.5` for an amount in rupees, because the digits were right. Stubs test
+the code you wrote against the behaviour you imagined.
+
 Also fixed: the match rate double-counted five orders; a chargeback reversal was
 invisible; a malformed date killed the batch; a debit satisfied a settlement; a
 credit dated before its settlement matched; a settlement whose fees exceeded the
@@ -192,10 +197,16 @@ the draft and checks each against the facts the model was given:
 ```
 "...2 orders totalling 28,876.92, about 3.4% of monthly revenue."
    -> REJECTED, invented: [3.4]
+"...1 order putting $13381.5 at risk."
+   -> REJECTED, invented: ['$']
 ```
 
 Rounding is rejected too: in a finance document a rounded figure is a different
-figure.
+figure. So is a currency. The first live run of this feature had the model write
+`$13381.5` for an amount in rupees, and the number guard passed it because the
+digits were right. A brief wrong by an exchange rate is worse than a dull one,
+so the facts state amounts as bare numbers and a brief that names a currency is
+discarded.
 
 ### What each tier is worth
 

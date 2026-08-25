@@ -1,4 +1,5 @@
 pandas>=2.0
 openai>=3.0        # responses.parse + strict structured outputs
+python-dotenv>=1.0 # reads OPENAI_API_KEY from a local .env
 pytest>=8.0
 hypothesis>=6.0   # property-based invariant tests
