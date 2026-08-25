@@ -12,6 +12,7 @@ measuring anything.
 import json
 
 from src.money import build_money_report
+from src.close_gate import print_close_gate
 from src.triage import build_triage_report, print_triage
 
 
@@ -185,6 +186,10 @@ def print_summary(report):
     if report.get("triage"):
         print()
         print_triage(report["triage"])
+
+    if report.get("close_gate"):
+        print()
+        print_close_gate(report["close_gate"])
 
     if report["unattributed_bank_credits"]:
         print(f"\nUnattributed bank credits: {len(report['unattributed_bank_credits'])}")

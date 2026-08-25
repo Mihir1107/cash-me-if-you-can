@@ -37,10 +37,15 @@ def test_perfect_run_scores_perfectly():
         truth(order_1="matched", order_2="fee_footing_mismatch"),
         report([("order_2", "ledger_settlement", "fee_footing_mismatch")]))
     assert result["exact_label_accuracy"] == 1.0
-    assert result["fault_detection"] == {
+    detection = result["fault_detection"]
+    assert {k: detection[k] for k in
+            ("injected_faults", "detected", "false_positives", "missed",
+             "precision", "recall")} == {
         "injected_faults": 1, "detected": 1, "false_positives": 0, "missed": 0,
         "precision": 1.0, "recall": 1.0,
     }
+    # a perfect score on one trial is not evidence of a perfect agent
+    assert detection["recall_ci95"][0] < 0.5
     assert result["misclassified"] == []
 
 
@@ -111,3 +116,57 @@ def test_ablation_shows_the_fuzzy_tier_earning_its_place(workspace, monkeypatch)
     assert with_fuzzy["unresolved_narrations"] < regex_only["unresolved_narrations"]
     assert with_fuzzy["unresolved_narrations"] == 3
     assert rows[2]["skipped"]                        # LLM row honestly skipped
+
+
+# ------------------------------------------------- interval discipline
+
+def test_wilson_matches_published_values():
+    from src.evaluate import wilson_interval
+
+    assert wilson_interval(5, 10) == (0.2366, 0.7634)
+    assert wilson_interval(32, 32) == (0.8928, 1.0)
+    assert wilson_interval(0, 10) == (0.0, 0.2775)
+
+
+def test_a_perfect_score_does_not_claim_certainty():
+    """
+    32 out of 32 is consistent with a true detection rate above about 89%. It is
+    not proof of 100%, and reporting it as though it were would be exactly the
+    overclaiming this project exists to avoid.
+    """
+    from src.evaluate import wilson_interval
+
+    low, high = wilson_interval(32, 32)
+    assert high == 1.0
+    assert 0.85 < low < 0.95
+
+
+def test_intervals_never_escape_zero_to_one():
+    from src.evaluate import wilson_interval
+
+    for successes, trials in [(0, 1), (1, 1), (0, 3), (3, 3), (7, 9)]:
+        low, high = wilson_interval(successes, trials)
+        assert 0.0 <= low <= high <= 1.0
+
+
+def test_a_bigger_sample_narrows_the_interval():
+    """The interval must actually encode sample size, not decorate the number."""
+    from src.evaluate import wilson_interval
+
+    small = wilson_interval(10, 10)
+    large = wilson_interval(1000, 1000)
+    assert large[0] > small[0]
+
+
+def test_the_match_rate_carries_no_interval(workspace, monkeypatch):
+    """
+    Deliberate. Every order in the batch was checked, so the match rate is a
+    census and a confidence band would imply sampling error that is not there.
+    """
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    data, out = workspace
+    payload, result, _ = run_evaluation(str(data), str(out))
+
+    assert "match_rate_ci95" not in payload
+    assert "recall_ci95" in result["fault_detection"]
+    assert "census" in result["fault_detection"]["sample_note"]

@@ -10,7 +10,16 @@
       "false_positives": 3,
       "missed": 0,
       "precision": 0.9143,
-      "recall": 1.0
+      "recall": 1.0,
+      "recall_ci95": [
+        0.8928,
+        1.0
+      ],
+      "precision_ci95": [
+        0.7762,
+        0.9704
+      ],
+      "sample_note": "95% Wilson intervals. These are estimates from the injected faults; the match rate is a census and carries no interval."
     },
     "per_reason_code": {
       "bank_amount_mismatch": {

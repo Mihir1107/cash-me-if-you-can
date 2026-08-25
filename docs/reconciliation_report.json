@@ -269,20 +269,20 @@
     "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
   },
   "throughput": {
-    "wall_clock_ms": 7.19,
+    "wall_clock_ms": 8.56,
     "orders": 57,
     "bank_rows": 50,
     "records_processed": 107,
-    "records_per_second": 14881.8,
+    "records_per_second": 12500.0,
     "llm_calls": 0,
     "llm_calls_per_100_orders": 0.0,
     "stage_ms": {
-      "load_sources": 0.8,
+      "load_sources": 1.06,
       "stage_a_ledger_settlement": 1.45,
-      "tier1_narration_regex": 0.73,
-      "tier2_narration_fuzzy": 0.38,
+      "tier1_narration_regex": 0.79,
+      "tier2_narration_fuzzy": 0.41,
       "tier3_narration_llm": 0.01,
-      "stage_b_settlement_bank": 1.74
+      "stage_b_settlement_bank": 1.83
     }
   },
   "bank_source_error": null,
@@ -703,5 +703,64 @@
       "reason_code": "narration_unresolved",
       "basis": "LLM unavailable \u2014 no OPENAI_API_KEY set, routed to exception"
     }
-  ]
+  ],
+  "audit_trail": {
+    "intact": true,
+    "entries": 117,
+    "verified": 117,
+    "unverifiable_prefix": 0,
+    "broken_at": null,
+    "reason": "all 117 hashed entries verify against the chain"
+  },
+  "close_gate": {
+    "can_close": false,
+    "blocker_count": 4,
+    "value_blocking_close": 504718.32,
+    "conditions_checked": 7,
+    "conditions_passed": [
+      "audit_trail_intact",
+      "sources_verifiable",
+      "books_balance"
+    ],
+    "blockers": [
+      {
+        "condition": "revenue_recorded",
+        "why": "2 settlement(s) were received for orders the ledger never booked, so revenue for the period is understated.",
+        "action": "Book the missing orders, or explain why the money is not ours.",
+        "value_at_risk": 28876.92,
+        "detail": {
+          "order_count": 2
+        }
+      },
+      {
+        "condition": "reversals_booked",
+        "why": "1 settlement(s) were credited and then reversed, so the closing cash position is overstated until the reversals are booked.",
+        "action": "Book the chargebacks against the original settlements.",
+        "value_at_risk": 13381.5,
+        "detail": {
+          "order_count": 1
+        }
+      },
+      {
+        "condition": "cash_attributable",
+        "why": "43,868.63 of bank credits cannot be tied to any settlement, which is above the materiality threshold of 3,322.13.",
+        "action": "Attribute the credits by hand, or hold them in suspense and disclose.",
+        "value_at_risk": 43868.63,
+        "detail": {
+          "threshold": 3322.13
+        }
+      },
+      {
+        "condition": "material_exceptions_resolved",
+        "why": "10 incident(s) above the materiality threshold are still open.",
+        "action": "Work the triage queue, or record a documented decision to accept each one.",
+        "value_at_risk": 418591.27,
+        "detail": {
+          "incident_count": 10,
+          "threshold": 3322.13
+        }
+      }
+    ],
+    "note": "A close decision, not a close. This records what a controller would need to resolve before signing; it signs nothing."
+  }
 }

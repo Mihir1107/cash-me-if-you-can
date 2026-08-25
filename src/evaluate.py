@@ -14,13 +14,43 @@ measured number rather than an assertion.
 """
 
 import json
+import math
 import os
 
 import pandas as pd
 
+Z_95 = 1.959963984540054  # two-sided 95%
+
 from src.reconcile import run_reconciliation
 
 MATCHED = "matched"
+
+
+def wilson_interval(successes, trials, z=Z_95):
+    """
+    Wilson score interval for a proportion.
+
+    Used here on detection rates and NOT on the match rate, and the distinction
+    is the point. The match rate is a census: every order in the batch was
+    checked, so 24/57 is exactly the answer with no sampling error to interval.
+    Putting a confidence band on it would imply an uncertainty that does not
+    exist.
+
+    Recall and precision are different. They estimate how this agent would
+    behave on faults it has not seen, from the 32 that happened to be injected.
+    32 out of 32 is a perfect score on a small sample, and the honest reading is
+    "consistent with a true detection rate above about 89%", not "proven 100%".
+    Wilson rather than the normal approximation because the latter produces
+    intervals that include impossible values exactly at the boundaries where
+    these results sit.
+    """
+    if trials <= 0:
+        return (0.0, 0.0)
+    p = successes / trials
+    denom = 1 + z * z / trials
+    centre = (p + z * z / (2 * trials)) / denom
+    half = z * math.sqrt(p * (1 - p) / trials + z * z / (4 * trials * trials)) / denom
+    return (round(max(0.0, centre - half), 4), round(min(1.0, centre + half), 4))
 
 
 def predicted_labels(report):
@@ -86,6 +116,12 @@ def score(truth_df, report):
             "missed": faults_fn,
             "precision": round(detect_p, 4),
             "recall": round(detect_r, 4),
+            # what this sample of faults implies about unseen ones
+            "recall_ci95": wilson_interval(faults_tp, faults_tp + faults_fn),
+            "precision_ci95": wilson_interval(faults_tp, faults_tp + faults_fp),
+            "sample_note": ("95% Wilson intervals. These are estimates from the "
+                            "injected faults; the match rate is a census and "
+                            "carries no interval."),
         },
         "per_reason_code": per_label,
         "confusion_matrix": confusion,
@@ -129,7 +165,14 @@ def print_evaluation(result, ablation_rows):
     print(f"  detected:               {fd['detected']}")
     print(f"  missed (false neg):     {fd['missed']}")
     print(f"  false positives:        {fd['false_positives']}")
-    print(f"Fault detection precision {fd['precision']:.2%}   recall {fd['recall']:.2%}")
+    lo_r, hi_r = fd.get("recall_ci95", (0.0, 0.0))
+    lo_p, hi_p = fd.get("precision_ci95", (0.0, 0.0))
+    print(f"Fault detection precision {fd['precision']:.2%}  "
+          f"[95% CI {lo_p:.1%}-{hi_p:.1%}]")
+    print(f"Fault detection recall    {fd['recall']:.2%}  "
+          f"[95% CI {lo_r:.1%}-{hi_r:.1%}]")
+    print(f"  ({fd['injected_faults']} injected faults; the match rate is a "
+          f"census and carries no interval)")
     print(f"Exact reason-code accuracy: {result['exact_label_accuracy']:.2%}")
     print("-" * 74)
     print(f"{'reason_code':<26}{'support':>8}{'prec':>9}{'recall':>9}{'F1':>8}{'FP':>5}{'FN':>5}")

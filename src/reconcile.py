@@ -25,7 +25,8 @@ from src.matcher import (
 )
 from src.fuzzy_resolver import resolve_unresolved_bank_rows as fuzzy_resolve
 from src.llm_resolver import resolve_unresolved_bank_rows as llm_resolve
-from src.audit import AuditTrail
+from src.audit import AuditTrail, verify_chain
+from src.close_gate import evaluate_close
 from src.money import build_exposure_index
 from src.report import build_report, print_summary, save_report
 
@@ -241,8 +242,19 @@ def run_reconciliation(data_dir="data", output_dir="output",
                                              if r.get("llm_invoked"))),
     )
 
+    # The close decision is evaluated last, because one of its conditions is
+    # whether the decision log verifies against its own hash chain, and that
+    # cannot be known until the log has been written.
+    audit_status = None
     if write_outputs:
-        audit.save(f"{output_dir}/audit_trail.jsonl")
+        audit_path = f"{output_dir}/audit_trail.jsonl"
+        audit.save(audit_path)
+        audit_status = verify_chain(audit_path)
+
+    report["audit_trail"] = audit_status or {}
+    report["close_gate"] = evaluate_close(report, audit_status)
+
+    if write_outputs:
         save_report(report, f"{output_dir}/reconciliation_report.json")
 
     return report, audit
