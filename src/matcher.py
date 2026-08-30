@@ -18,10 +18,21 @@ and then llm_resolver.py -- never silently dropped, never force-matched.
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 AMOUNT_TOLERANCE = 1.0  # paise-level rounding tolerance, in rupees
-BANK_DATE_WINDOW_DAYS = 5  # settlement_date .. settlement_date + N is "normal"
+
+# Razorpay's documented cycle is T+2 *working* days, and settlements are only
+# processed on bank working days: not Sundays, not the second and fourth
+# Saturday, not public holidays. A flat calendar-day window is therefore not
+# equivalent -- a Friday settlement before a long weekend can credit five or six
+# calendar days later and still be perfectly on time. Counting working days
+# removes that false positive.
+#
+# Public holidays are NOT modelled. That needs a per-year Indian bank calendar,
+# which is a data problem rather than a logic one, so this under-counts the
+# window around a holiday and can still flag a late-but-legitimate credit.
+BANK_WINDOW_WORKING_DAYS = 3
 
 # Ledger statuses that show the merchant knows a refund happened.
 REFUND_AWARE_STATUSES = {"refunded", "partially_refunded", "refund_processed"}
@@ -36,6 +47,35 @@ class MatchResult:
     basis: str = ""
     confidence: float = 1.0
     detail: dict = field(default_factory=dict)
+
+
+def is_bank_working_day(day):
+    """
+    Indian bank working day: not Sunday, not the second or fourth Saturday.
+    Public holidays are not modelled; see BANK_WINDOW_WORKING_DAYS.
+    """
+    if day.weekday() == 6:              # Sunday
+        return False
+    if day.weekday() == 5:              # Saturday
+        nth = (day.day - 1) // 7 + 1    # which Saturday of the month
+        return nth not in (2, 4)
+    return True
+
+
+def working_days_between(start, end):
+    """
+    Bank working days strictly after `start`, up to and including `end`.
+    Negative when end precedes start, so an impossible ordering stays visible.
+    """
+    if end < start:
+        return -working_days_between(end, start)
+    days = 0
+    cursor = start
+    while cursor < end:
+        cursor += timedelta(days=1)
+        if is_bank_working_day(cursor):
+            days += 1
+    return days
 
 
 def _parse_date(s):
@@ -384,6 +424,61 @@ def link_bank_rows(bank_df, known_utrs, extra_links=None, index=None):
                                 extra_links, known_utrs)
 
 
+def _filter_ambiguous_proposals(settlement_df, partition, extra_links):
+    """
+    Drop proposals whose credit could belong to more than one settlement.
+
+    Stage B verifies amount and date. Those checks catch a wrong proposal only
+    when the wrong settlement expects a *different* amount. Two settlements
+    expecting the same amount on the same day defeat them entirely: the credit
+    passes every check against whichever one it was pointed at, and the other is
+    reported as never credited. The result is a confident, verified, wrong match.
+
+    Amount equality is not attribution. When a proposal names one of several
+    settlements that could equally claim a credit, the honest outcome is that
+    nothing is attributed, so the proposal is refused here and the credit stays
+    unresolved. A reference read directly out of the narration is unaffected --
+    that is real evidence, not a guess, and it survives an amount collision.
+
+    Returns (accepted, refused) as {txn_id: utr} dicts.
+    """
+    if not extra_links:
+        return {}, {}
+
+    already_linked, unresolved, _ = partition
+
+    # what each settlement group is still waiting for
+    expected_by_utr = {}
+    for _, row in settlement_df.iterrows():
+        amount = _num(row, "settled_amount")
+        if amount is None:
+            continue
+        expected_by_utr.setdefault(row["utr"], []).append(amount)
+
+    uncredited = {utr: round(sum(amounts), 2)
+                  for utr, amounts in expected_by_utr.items()
+                  if utr not in already_linked}
+
+    by_txn = {row["txn_id"]: row for row in unresolved}
+    accepted, refused = {}, {}
+
+    for txn_id, utr in extra_links.items():
+        row = by_txn.get(txn_id)
+        amount = _num(row, "amount") if row is not None else None
+        if amount is None:
+            accepted[txn_id] = utr
+            continue
+
+        rivals = [candidate for candidate, expected in uncredited.items()
+                  if abs(expected - amount) <= AMOUNT_TOLERANCE]
+        if len(rivals) > 1:
+            refused[txn_id] = utr
+        else:
+            accepted[txn_id] = utr
+
+    return accepted, refused
+
+
 def tolerance_for(legs):
     """Rounding tolerance accumulates across the legs of a batched payout."""
     return AMOUNT_TOLERANCE * max(1, len(legs))
@@ -406,8 +501,15 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None,
     utr_index = build_utr_index(known_utrs)
     if partition is None:
         partition = link_bank_rows(bank_df, known_utrs, index=utr_index)
+
+    # A proposal from the fuzzy or LLM tier is weaker evidence than a reference
+    # read straight out of the narration, so it is only allowed to resolve an
+    # attribution that is already unambiguous. Filtering happens before the
+    # proposals are folded in, so an ambiguous one never reaches verification.
+    safe_links, refused_links = _filter_ambiguous_proposals(
+        settlement_df, partition, extra_links)
     bank_by_utr, unresolved, non_credits = apply_link_proposals(
-        partition, extra_links, known_utrs)
+        partition, safe_links, known_utrs)
 
     # A debit quoting a settlement's own reference is that settlement being
     # clawed back: a chargeback, a reversal, a recall. Filtering non-credits out
@@ -468,6 +570,26 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None,
                 ))
             continue
 
+        if not credits and any(u == utr for u in refused_links.values()):
+            # A tier proposed this settlement for a credit, and the credit could
+            # equally have belonged to another settlement expecting the same
+            # amount. Refusing is the whole point, but it is also a finding: a
+            # controller needs to know money is sitting there unattributable
+            # rather than believing nothing arrived.
+            rival_count = sum(1 for u in refused_links.values() if u != utr) + 1
+            for oid in order_ids:
+                results.append(MatchResult(
+                    order_id=oid, stage="settlement_bank", status="exception",
+                    reason_code="attribution_ambiguous",
+                    basis=(f"a credit was proposed for settlement {utr}, but the "
+                           f"amount alone cannot distinguish it from other "
+                           f"settlements expecting the same total — attribution "
+                           f"refused rather than guessed"),
+                    detail={"utr": utr, "expected_amount": expected,
+                            "ambiguous_candidates": rival_count},
+                ))
+            continue
+
         if not credits:
             # Two very different problems wear the same face here, and a
             # controller triages them oppositely: money that never arrived is
@@ -512,11 +634,15 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None,
 
         actual = round(sum(credit_amounts), 2)
         tolerance = tolerance_for(legs)
-        batch_note = (f"batch of {len(legs)} settlements under one payout"
-                      if len(legs) > 1 else "single settlement")
+        # Razorpay gives each settlement one UTR and settles many payments under
+        # it, so orders sharing a reference are payments inside one settlement,
+        # not several settlements sharing a reference. The distinction matters:
+        # the first is documented behaviour, the second would be an anomaly.
+        batch_note = (f"{len(legs)} payments in one settlement"
+                      if len(legs) > 1 else "single payment settlement")
         if has_duplicates:
-            batch_note += (f" ({len(batch) - len(legs)} duplicate settlement row(s) "
-                           f"ignored here, reported by Stage A)")
+            batch_note += (f" ({len(batch) - len(legs)} duplicate row(s) ignored "
+                           f"here, reported by Stage A)")
 
         if abs(actual - expected) > tolerance:
             for oid in order_ids:
@@ -543,7 +669,8 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None,
 
         latest_settlement = max(settlement_dates)
         latest_credit = max(credit_dates)
-        date_gap = (latest_credit - latest_settlement).days
+        calendar_gap = (latest_credit - latest_settlement).days
+        date_gap = working_days_between(latest_settlement, latest_credit)
 
         if date_gap < 0:
             # The bank cannot pay out a settlement that had not been made yet.
@@ -554,20 +681,23 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None,
                 results.append(MatchResult(
                     order_id=oid, stage="settlement_bank", status="exception",
                     reason_code="bank_credit_predates_settlement",
-                    basis=(f"bank credit is {abs(date_gap)} days BEFORE the "
+                    basis=(f"bank credit is {abs(calendar_gap)} days BEFORE the "
                            f"settlement date — impossible ordering"),
-                    detail={"utr": utr, "date_gap_days": date_gap},
+                    detail={"utr": utr, "date_gap_days": date_gap,
+                            "calendar_gap_days": calendar_gap},
                 ))
             continue
 
-        if date_gap > BANK_DATE_WINDOW_DAYS:
+        if date_gap > BANK_WINDOW_WORKING_DAYS:
             for oid in order_ids:
                 results.append(MatchResult(
                     order_id=oid, stage="settlement_bank", status="exception",
                     reason_code="bank_credit_delayed",
-                    basis=(f"bank credit {date_gap} days after settlement "
-                           f"(window={BANK_DATE_WINDOW_DAYS})"),
-                    detail={"utr": utr, "date_gap_days": date_gap},
+                    basis=(f"bank credit {date_gap} working days after settlement "
+                           f"({calendar_gap} calendar), window="
+                           f"{BANK_WINDOW_WORKING_DAYS} working days"),
+                    detail={"utr": utr, "date_gap_days": date_gap,
+                            "calendar_gap_days": calendar_gap},
                 ))
             continue
 
@@ -575,8 +705,9 @@ def match_settlement_to_bank(settlement_df, bank_df, extra_links=None,
             results.append(MatchResult(
                 order_id=oid, stage="settlement_bank", status="matched",
                 basis=(f"UTR {utr} match, amount agrees ({batch_note}), "
-                       f"{date_gap}d gap within window"),
-                detail={"utr": utr},
+                       f"{date_gap} working-day gap within window"),
+                detail={"utr": utr, "date_gap_days": date_gap,
+                        "calendar_gap_days": calendar_gap},
             ))
 
     return results, unresolved

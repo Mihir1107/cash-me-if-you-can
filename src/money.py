@@ -13,6 +13,13 @@ So every order carries an exposure -- the amount of money its verdict is about:
     an order never settled -> ledger amount, revenue the merchant has booked
                               and has no payout for
 
+The basis therefore changes depending on whether a settlement exists, which is
+a deliberate simplification and worth naming: it mixes cash risk (a payout that
+did not arrive) with receivable risk (revenue booked that has not settled yet).
+A controller tracks those separately. This single figure is an operational
+measure for ranking exceptions, not a cash-flow or accounting exposure, and the
+report labels it as such.
+
 Exposure is a magnitude. A settlement can legitimately net negative -- a
 refund-heavy period where Razorpay claws back more than it pays -- and the money
 at stake in that verdict is the size of the swing, not its direction. A

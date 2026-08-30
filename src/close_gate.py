@@ -14,9 +14,12 @@ omit revenue are wrong rather than approximately right.
 
 Two things deliberately do NOT block.
 
-**Immaterial exceptions.** That is what materiality means. An auditor sets a
-threshold below which a difference costs more to chase than it distorts, and
-holding a close open for it would be theatre.
+**Sub-threshold exceptions.** Holding a close open for a difference smaller than
+the cost of chasing it would be theatre. Note that the threshold is an
+operational triage heuristic, not audit materiality: a real close would also
+apply qualitative overrides, so a small item can still block if its *nature*
+matters (a suspected duplicate payment, a control failure, anything with a tax
+consequence). This gate does not model those.
 
 **Late credits that arrived.** A payment outside the normal window is a timing
 observation, not a misstatement. The money is there and the books can say so.

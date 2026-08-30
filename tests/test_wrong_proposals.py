@@ -137,3 +137,68 @@ def test_no_confidence_level_can_buy_a_match(monkeypatch, confidence):
     results, _ = match_settlement_to_bank(TWO_SETTLEMENTS, credit, extra)
 
     assert not [r for r in results if r.status == "matched"]
+
+
+# ------------------------------------------- the case verification cannot see
+
+EQUAL_AMOUNTS = pd.DataFrame([
+    settlement("order_A", "UTR100005", 1000.00, "s1"),
+    settlement("order_B", "UTR100006", 1000.00, "s2"),
+])
+
+
+def test_an_equal_amount_collision_cannot_produce_a_match():
+    """
+    The hole the rest of this file did not cover.
+
+    Stage B verifies amount and date. Those checks catch a wrong proposal only
+    when the settlement it names expects a *different* amount. Two settlements
+    expecting the same amount on the same day defeat them completely: the credit
+    passes every check against whichever one it was pointed at, and the other is
+    reported as never credited. That is a confident, fully verified, wrong match,
+    and it was reachable until proposals started being filtered for ambiguity.
+
+    The narration below is corrupted toward order_A. The money is order_B's.
+    """
+    credit = pd.DataFrame([bank("b1", 1000.00, "NEFT RZPY UTR10005 CR")])
+    known = set(EQUAL_AMOUNTS["utr"])
+
+    links, _ = fuzzy_resolve([r for _, r in credit.iterrows()], known)
+    assert links[0]["utr_candidate"] == "UTR100005"   # confidently wrong
+    assert links[0]["confidence"] >= 0.9
+
+    results, _ = match_settlement_to_bank(
+        EQUAL_AMOUNTS, credit, {l["txn_id"]: l["utr_candidate"] for l in links})
+
+    assert not [r for r in results if r.status == "matched"]
+    assert verdicts(results)["order_A"] == ("exception", "attribution_ambiguous")
+
+
+def test_a_direct_narration_read_survives_an_amount_collision():
+    """
+    Control, and the reason the fix is a filter on *proposals* rather than a
+    blanket rule. A reference read straight out of the narration is evidence,
+    not a guess, so an amount collision must not throw it away.
+    """
+    credit = pd.DataFrame([bank("b1", 1000.00, "RAZORPAY SETTLEMENT UTR:UTR100005")])
+    results, _ = match_settlement_to_bank(EQUAL_AMOUNTS, credit)
+
+    assert verdicts(results)["order_A"] == ("matched", "")
+    assert verdicts(results)["order_B"][0] == "exception"
+
+
+@pytest.mark.parametrize("confidence", [0.7, 0.95, 1.0])
+def test_no_confidence_rescues_an_ambiguous_attribution(monkeypatch, confidence):
+    """Certainty is not evidence of identity when two candidates are identical."""
+    monkeypatch.setattr(llm_resolver, "resolve_narration", lambda narration: {
+        "utr_candidate": "UTR100005", "order_id_candidate": None,
+        "confidence": confidence, "llm_invoked": True,
+    })
+    credit = pd.DataFrame([bank("b1", 1000.00, "CR/ONLINE TRF/no ref quoted")])
+
+    links, _ = llm_resolve([r for _, r in credit.iterrows()],
+                           set(EQUAL_AMOUNTS["utr"]))
+    results, _ = match_settlement_to_bank(
+        EQUAL_AMOUNTS, credit, {l["txn_id"]: l["utr_candidate"] for l in links})
+
+    assert not [r for r in results if r.status == "matched"]

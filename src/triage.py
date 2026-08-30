@@ -18,11 +18,21 @@ is Razorpay's to explain; an unreflected refund is the merchant's to book; a
 delayed credit is the bank's to clear. Routing is a property of the code, so it
 is a table, not a judgement.
 
-**Materiality.** Auditors do not investigate every rupee, they set a threshold
-below which a difference is not worth the cost of chasing. Incidents under it
-are still reported, still counted, and still in the money identity. They are
-just marked as not worth a human today, which is a recommendation a controller
-can overrule, not a number that quietly disappears.
+**A triage threshold.** Not every difference is worth a person's afternoon, so
+incidents below a threshold are ranked last. Incidents under it are still
+reported, still counted, and still inside the money identity. They are marked as
+not worth a human today, which a controller can overrule, not a number that
+quietly disappears.
+
+This is deliberately NOT financial-statement materiality, and the distinction
+matters enough to state plainly. Audit materiality under SA 320 / ISA 320 is a
+judgement set against a benchmark chosen for the entity -- profit before tax,
+revenue, total assets -- and it carries qualitative overrides, so a small item
+can still be material by its nature. Nothing here does that. The number below is
+an operational escalation heuristic for a reconciliation work queue: 0.5% of the
+run's own exposure, floored, chosen because it produces a sensible queue on
+batches of this size. It has no standing as an accounting conclusion, and a real
+deployment would replace it with a threshold agreed with the controller.
 
 Everything here is deterministic. No model is consulted, because none is needed:
 routing is a lookup, clustering is a signature, and priority is arithmetic on
@@ -34,8 +44,14 @@ with its evidence attached. Nothing here edits a ledger, posts an entry, or
 closes anything. A human does that, holding the evidence pack this produces.
 """
 
-MATERIALITY_PCT = 0.005      # 0.5% of total exposure
-MATERIALITY_FLOOR = 1000.00  # ...but never below this, in rupees
+# Operational triage heuristic, not audit materiality. See the module docstring.
+TRIAGE_THRESHOLD_PCT = 0.005      # 0.5% of the run's exposure
+TRIAGE_THRESHOLD_FLOOR = 1000.00  # ...but never below this, in rupees
+
+# Backwards-compatible aliases; the old names implied an authority the numbers
+# do not have.
+MATERIALITY_PCT = TRIAGE_THRESHOLD_PCT
+MATERIALITY_FLOOR = TRIAGE_THRESHOLD_FLOOR
 
 # Who can actually fix each break, what the next action is, and how fast it
 # needs attention. Urgency is about consequence, not size: unrecorded revenue is
@@ -289,8 +305,10 @@ def build_triage_report(exceptions, exposure_index, total_exposure):
         "incident_count": len(incidents),
         "material_incident_count": len(material),
         "materiality_threshold": threshold,
-        "materiality_basis": (f"{MATERIALITY_PCT:.1%} of total exposure, floored "
-                              f"at {MATERIALITY_FLOOR:,.2f}"),
+        "materiality_basis": (f"{TRIAGE_THRESHOLD_PCT:.1%} of this run's exposure, "
+                              f"floored at {TRIAGE_THRESHOLD_FLOOR:,.2f}. "
+                              f"Operational triage heuristic, not audit "
+                              f"materiality under SA 320 / ISA 320."),
         "value_above_threshold": round(sum(i["value_at_risk"] for i in material), 2),
         "value_below_threshold": round(
             sum(i["value_at_risk"] for i in incidents if not i["material"]), 2),

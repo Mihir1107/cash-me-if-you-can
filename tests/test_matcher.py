@@ -1,7 +1,7 @@
 import pandas as pd
 
 from src.matcher import (
-    BANK_DATE_WINDOW_DAYS,
+    BANK_WINDOW_WORKING_DAYS,
     link_bank_rows,
     match_ledger_to_settlement,
     match_settlement_to_bank,
@@ -173,15 +173,36 @@ def test_settlement_with_no_bank_credit_is_reported():
 
 
 def test_bank_credit_delayed_fires_past_the_window_boundary():
+    """
+    The window is counted in bank working days, not calendar days. Settlement
+    Monday 2026-08-03: Thursday the 6th is 3 working days (on the boundary),
+    Friday the 7th is 4 (past it).
+    """
     stl = pd.DataFrame([settlement(date="2026-08-03")])
 
-    on_boundary = match_settlement_to_bank(stl, pd.DataFrame([bank(date="2026-08-08")]))[0]
+    on_boundary = match_settlement_to_bank(stl, pd.DataFrame([bank(date="2026-08-06")]))[0]
     assert on_boundary[0].status == "matched"  # gap == window is still normal
 
-    past = match_settlement_to_bank(stl, pd.DataFrame([bank(date="2026-08-09")]))[0]
+    past = match_settlement_to_bank(stl, pd.DataFrame([bank(date="2026-08-07")]))[0]
     assert past[0].status == "exception"
     assert past[0].reason_code == "bank_credit_delayed"
-    assert past[0].detail["date_gap_days"] == BANK_DATE_WINDOW_DAYS + 1
+    assert past[0].detail["date_gap_days"] == BANK_WINDOW_WORKING_DAYS + 1
+
+
+def test_a_weekend_does_not_make_an_on_time_credit_look_late():
+    """
+    Razorpay's cycle is T+2 *working* days and banks do not settle on Sundays or
+    the second and fourth Saturday. A Friday settlement credited the following
+    Wednesday spans five calendar days and only three working ones, so counting
+    calendar days would have reported a perfectly normal credit as delayed.
+    """
+    # 2026-08-08 is the second Saturday, 2026-08-09 a Sunday
+    stl = pd.DataFrame([settlement(date="2026-08-07")])
+    results, _ = match_settlement_to_bank(stl, pd.DataFrame([bank(date="2026-08-12")]))
+
+    assert results[0].status == "matched"
+    assert results[0].detail["date_gap_days"] == 3      # working
+    assert (pd.Timestamp("2026-08-12") - pd.Timestamp("2026-08-07")).days == 5  # calendar
 
 
 def test_many_to_one_batch_matches_against_the_batch_total():
@@ -222,7 +243,7 @@ def test_duplicate_settlement_row_is_not_mistaken_for_a_batch():
     ])
     results, _ = match_settlement_to_bank(settlements, pd.DataFrame([bank()]))
     assert [r.status for r in results] == ["matched"]
-    assert "duplicate settlement row" in results[0].basis
+    assert "duplicate row" in results[0].basis
 
 
 # ------------------------------------------------- narration link boundary
@@ -361,7 +382,9 @@ def test_bank_credit_predating_the_settlement_is_flagged():
     stl_df = pd.DataFrame([settlement(date="2026-08-20")])
     results, _ = match_settlement_to_bank(stl_df, pd.DataFrame([bank(date="2026-08-01")]))
     assert codes(results) == ["bank_credit_predates_settlement"]
-    assert results[0].detail["date_gap_days"] == -19
+    # the gap is reported in working days, with calendar days alongside it
+    assert results[0].detail["date_gap_days"] == -15
+    assert results[0].detail["calendar_gap_days"] == -19
 
     # a same-day credit is still fine
     same_day, _ = match_settlement_to_bank(stl_df, pd.DataFrame([bank(date="2026-08-20")]))

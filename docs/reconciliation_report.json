@@ -50,7 +50,7 @@
     "incident_count": 11,
     "material_incident_count": 10,
     "materiality_threshold": 3322.13,
-    "materiality_basis": "0.5% of total exposure, floored at 1,000.00",
+    "materiality_basis": "0.5% of this run's exposure, floored at 1,000.00. Operational triage heuristic, not audit materiality under SA 320 / ISA 320.",
     "value_above_threshold": 396392.44,
     "value_below_threshold": 3319.26,
     "by_owner": {
@@ -230,7 +230,7 @@
       },
       {
         "reason_code": "bank_credit_delayed",
-        "signature": "delay_over_1w",
+        "signature": "delay_1w",
         "owner": "bank_ops",
         "urgency": "low",
         "recommended_action": "Monitor. The credit landed outside the normal window but did land; chase only if this recurs for the same account.",
@@ -244,7 +244,7 @@
           "order_000040",
           "order_000052"
         ],
-        "sample_basis": "bank credit 8 days after settlement (window=5)",
+        "sample_basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days",
         "routed_by_policy": true
       },
       {
@@ -260,27 +260,27 @@
           "order_000008",
           "order_000032"
         ],
-        "sample_basis": "bank credited 872.99 vs settlement total 1122.99 (single settlement)",
+        "sample_basis": "bank credited 872.99 vs settlement total 1122.99 (single payment settlement)",
         "routed_by_policy": true
       }
     ],
     "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
   },
   "throughput": {
-    "wall_clock_ms": 3881.09,
+    "wall_clock_ms": 6879.51,
     "orders": 57,
     "bank_rows": 50,
     "records_processed": 107,
-    "records_per_second": 27.6,
+    "records_per_second": 15.6,
     "llm_calls": 3,
     "llm_calls_per_100_orders": 5.26,
     "stage_ms": {
-      "load_sources": 1.27,
-      "stage_a_ledger_settlement": 1.53,
-      "tier1_narration_regex": 0.8,
-      "tier2_narration_fuzzy": 0.44,
-      "tier3_narration_llm": 3858.01,
-      "stage_b_settlement_bank": 9.93
+      "load_sources": 0.65,
+      "stage_a_ledger_settlement": 1.45,
+      "tier1_narration_regex": 0.73,
+      "tier2_narration_fuzzy": 0.38,
+      "tier3_narration_llm": 6859.38,
+      "stage_b_settlement_bank": 11.67
     }
   },
   "bank_source_error": null,
@@ -524,10 +524,11 @@
       "order_id": "order_000004",
       "stage": "settlement_bank",
       "reason_code": "bank_credit_delayed",
-      "basis": "bank credit 8 days after settlement (window=5)",
+      "basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days",
       "detail": {
         "utr": "UTR100004",
-        "date_gap_days": 8
+        "date_gap_days": 6,
+        "calendar_gap_days": 8
       },
       "also_matched_in_stage_a": true
     },
@@ -535,7 +536,7 @@
       "order_id": "order_000008",
       "stage": "settlement_bank",
       "reason_code": "bank_amount_mismatch",
-      "basis": "bank credited 872.99 vs settlement total 1122.99 (single settlement)",
+      "basis": "bank credited 872.99 vs settlement total 1122.99 (single payment settlement)",
       "detail": {
         "utr": "UTR100008",
         "bank_amount": 872.99,
@@ -547,10 +548,11 @@
       "order_id": "order_000016",
       "stage": "settlement_bank",
       "reason_code": "bank_credit_delayed",
-      "basis": "bank credit 8 days after settlement (window=5)",
+      "basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days",
       "detail": {
         "utr": "UTR100016",
-        "date_gap_days": 8
+        "date_gap_days": 6,
+        "calendar_gap_days": 8
       },
       "also_matched_in_stage_a": true
     },
@@ -583,10 +585,11 @@
       "order_id": "order_000028",
       "stage": "settlement_bank",
       "reason_code": "bank_credit_delayed",
-      "basis": "bank credit 8 days after settlement (window=5)",
+      "basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days",
       "detail": {
         "utr": "UTR100028",
-        "date_gap_days": 8
+        "date_gap_days": 6,
+        "calendar_gap_days": 8
       },
       "also_matched_in_stage_a": true
     },
@@ -594,7 +597,7 @@
       "order_id": "order_000032",
       "stage": "settlement_bank",
       "reason_code": "bank_amount_mismatch",
-      "basis": "bank credited 1946.27 vs settlement total 2196.27 (single settlement)",
+      "basis": "bank credited 1946.27 vs settlement total 2196.27 (single payment settlement)",
       "detail": {
         "utr": "UTR100032",
         "bank_amount": 1946.27,
@@ -606,10 +609,11 @@
       "order_id": "order_000040",
       "stage": "settlement_bank",
       "reason_code": "bank_credit_delayed",
-      "basis": "bank credit 8 days after settlement (window=5)",
+      "basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days",
       "detail": {
         "utr": "UTR100040",
-        "date_gap_days": 8
+        "date_gap_days": 6,
+        "calendar_gap_days": 8
       },
       "also_matched_in_stage_a": true
     },
@@ -643,10 +647,11 @@
       "order_id": "order_000052",
       "stage": "settlement_bank",
       "reason_code": "bank_credit_delayed",
-      "basis": "bank credit 8 days after settlement (window=5)",
+      "basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days",
       "detail": {
         "utr": "UTR100052",
-        "date_gap_days": 8
+        "date_gap_days": 6,
+        "calendar_gap_days": 8
       },
       "also_matched_in_stage_a": true
     }
