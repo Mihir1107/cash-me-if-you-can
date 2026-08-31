@@ -238,7 +238,7 @@ def test_immaterial_incidents_print_in_their_own_section(capsys, workspace):
     printed = capsys.readouterr().out
 
     if report["triage"]["material_incident_count"] < report["triage"]["incident_count"]:
-        assert "Below the materiality threshold" in printed
+        assert "Below the triage threshold" in printed
         assert "Still reported, still counted" in printed
 
 

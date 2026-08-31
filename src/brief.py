@@ -198,7 +198,7 @@ def draft_brief(incident):
 def attach_briefs(triage, limit=3):
     """
     Draft briefs for the most consequential incidents only. The queue is already
-    ranked, and a brief for something below the materiality threshold is a call
+    ranked, and a brief for something below the triage threshold is a call
     nobody needed to make.
     """
     if not triage or not triage.get("incidents"):

@@ -337,7 +337,7 @@ def print_triage(triage):
     print("=" * 62)
     print(f"{triage['exception_rows']} exception rows cluster into "
           f"{triage['incident_count']} incidents, "
-          f"{triage['material_incident_count']} above the materiality threshold "
+          f"{triage['material_incident_count']} above the triage threshold "
           f"of {triage['materiality_threshold']:,.2f}")
     print(f"  ({triage['materiality_basis']})")
     print()
@@ -370,7 +370,7 @@ def print_triage(triage):
     if immaterial:
         print()
         print("-" * 62)
-        print(f"Below the materiality threshold of "
+        print(f"Below the triage threshold of "
               f"{triage['materiality_threshold']:,.2f}, "
               f"{triage['value_below_threshold']:,.2f} in total.")
         print("Still reported, still counted, still inside the money identity.")

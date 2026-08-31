@@ -132,7 +132,7 @@ def _cash_attributable(report, audit_status):
     return _blocker(
         "cash_attributable",
         f"{unattributed:,.2f} of bank credits cannot be tied to any settlement, "
-        f"which is above the materiality threshold of {threshold:,.2f}.",
+        f"which is above the triage threshold of {threshold:,.2f}.",
         "Attribute the credits by hand, or hold them in suspense and disclose.",
         value_at_risk=unattributed,
         detail={"threshold": threshold},
@@ -146,7 +146,7 @@ def _material_exceptions_resolved(report, audit_status):
         return None
     return _blocker(
         "material_exceptions_resolved",
-        f"{material} incident(s) above the materiality threshold are still "
+        f"{material} incident(s) above the triage threshold are still "
         f"open.",
         "Work the triage queue, or record a documented decision to accept each "
         "one.",
