@@ -56,7 +56,57 @@ class SourceUnavailable(Exception):
         self.columns = list(columns or [])   # what the file actually has
 
 
-def load_source(path, name, mapping=None):
+def propose_and_verify(df, found, name, filename=None):
+    """
+    Let the model propose the columns the alias table could not place, then
+    check the proposal against the file before believing any of it.
+
+    Same boundary as the narration tier. The model reads header names -- a
+    language problem, and the only part of a finance export carrying no
+    financial data -- and proposes. `verify_mapping` then does arithmetic on the
+    real rows: amounts must be numeric, dates must parse, identifiers must
+    identify, and a settlement must foot against its own parts.
+
+    A failed proposal is discarded WHOLE, not partially kept. A mapping is a
+    single claim about what a file means: if the model confused gross and
+    settled, nothing it said about that file has earned any trust.
+
+    The alias table always wins where it was confident -- the model may only
+    fill gaps -- and anything still unfilled goes to the human.
+    """
+    from src import schema_llm
+
+    proposal = schema_llm.propose_mapping(df.columns, name,
+                                          filename=filename or name)
+    if not proposal["mapping"]:
+        out = dict(found)
+        if proposal.get("note"):
+            out["llm_note"] = proposal["note"]
+        return out
+
+    # deterministic wins; the model only fills what the table left empty
+    merged = dict(proposal["mapping"])
+    merged.update(found["mapping"])
+
+    spec = schema.FIELDS[name]
+    if not all(f in merged for f in spec["required"]):
+        return found
+
+    verdict = schema.verify_mapping(df, merged, name)
+    out = dict(found)
+    if not verdict["ok"]:
+        out["llm_rejected"] = verdict["failures"]
+        return out
+
+    out["mapping"] = merged
+    out["ready"] = True
+    out["llm_filled"] = sorted(set(merged) - set(found["mapping"]))
+    out["llm_verified"] = [c["check"] for c in verdict["checks"] if c["ok"]]
+    out["unresolved"] = [u for u in found["unresolved"] if u["field"] not in merged]
+    return out
+
+
+def load_source(path, name, mapping=None, allow_llm=False):
     """
     Read one CSV and get it into the column names this pipeline relies on.
 
@@ -64,6 +114,11 @@ def load_source(path, name, mapping=None):
     ours -- deterministically, by a curated alias table, never by guessing. Pass
     an explicit `mapping` ({field: their column}) to override, which is what the
     web app sends once a human has confirmed the columns it could not place.
+
+    `allow_llm` lets the model propose the columns the table could not place --
+    header names only, never data -- and every proposal is checked against the
+    file before it is used. Off by default: a run that silently depends on a
+    network call is not the default anyone should get.
 
     Raises SourceUnavailable when a required field cannot be resolved. The
     message carries the columns the file actually has, because "missing
@@ -85,6 +140,10 @@ def load_source(path, name, mapping=None):
             df = schema.merge_split_amount(df, found["split_amount"]["debit"],
                                            found["split_amount"]["credit"])
             found = schema.resolve(df.columns, name)
+
+        if not found["ready"] and allow_llm:
+            found = propose_and_verify(df, found, name)
+
         if not found["ready"]:
             missing = [u["field"] for u in found["unresolved"] if u["required"]]
             raise SourceUnavailable(
@@ -171,7 +230,7 @@ def _throughput(order_count, bank, timings, t_start, llm_calls):
 
 def run_reconciliation(data_dir="data", output_dir="output",
                        enable_fuzzy=True, enable_llm=True, write_outputs=True,
-                       column_mappings=None):
+                       column_mappings=None, allow_llm_schema=False):
     """
     enable_fuzzy / enable_llm exist so the evaluator can ablate the tiers and
     measure what each one is actually worth. Turning a tier off never turns a
@@ -198,9 +257,9 @@ def run_reconciliation(data_dir="data", output_dir="output",
     # rate computed over nothing. Fail loudly instead.
     ledger, settlements = stage("load_sources", lambda: (
         load_source(f"{data_dir}/internal_ledger.csv", "ledger",
-                    column_mappings.get("ledger")),
+                    column_mappings.get("ledger"), allow_llm_schema),
         load_source(f"{data_dir}/razorpay_settlements.csv", "settlements",
-                    column_mappings.get("settlements")),
+                    column_mappings.get("settlements"), allow_llm_schema),
     ))
 
     # --- Stage A: ledger <-> settlement (deterministic) ---
@@ -217,7 +276,7 @@ def run_reconciliation(data_dir="data", output_dir="output",
     bank_error = None
     try:
         bank = load_source(f"{data_dir}/bank_statement.csv", "bank",
-                           column_mappings.get("bank"))
+                           column_mappings.get("bank"), allow_llm_schema)
     except SourceUnavailable as e:
         bank_error = str(e)
 

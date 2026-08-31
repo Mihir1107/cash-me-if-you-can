@@ -11,7 +11,7 @@ pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --prove           # 30 seconds: watch a wrong proposal get refused
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 282 tests
+python -m pytest tests/ -q       # 302 tests
 python app.py                    # the app: drop in three CSVs, get a close decision
 ```
 
@@ -206,6 +206,7 @@ clustering is a signature, priority is arithmetic on money already computed.
 | Tier 1: narration regex | find a known reference | no |
 | Tier 2: fuzzy recovery | recover a reference the bank mangled | **no** |
 | Tier 3: LLM (`gpt-4o-mini`) | read a reference out of free text | yes |
+| Schema tier (`gpt-4o-mini`) | read a column header, then get verified against the file | opt-in |
 | Triage, close gate | cluster, route, decide | **no** |
 
 1. **The model never sees the answer key.** It gets the narration and nothing
@@ -304,6 +305,53 @@ prevent, and it is not worth saving two clicks. So unmatched columns go to a
 mapping screen with a ranked suggestion pre-selected, which a person confirms.
 The guess is offered; it is never applied.
 
+### Tier 3, for schemas
+
+The alias table only knows the headers I thought to write down, and there are
+thousands of accounting packages. Reading *"Remitted To Bank"* and knowing it
+means the net payout **is** a language problem — so it gets the same treatment
+the mangled-narration problem gets, with the same boundary.
+
+The model proposes; `verify_mapping()` then checks that proposal against your
+actual file. Do the amount columns hold numbers, do the dates parse, do the
+identifiers identify, and — the strong one — **does the settlement foot against
+its own parts**. A proposal that fails is discarded whole, because a mapping is a
+single claim about what a file means: if the model confused gross and settled,
+nothing it said about that file has earned any trust.
+
+```
+gross ↔ settled swapped    ->  0% of rows foot            REFUSED
+fee ↔ gross swapped        ->  median fee is 5000% of gross   REFUSED
+settlement_date ← utr      ->  0% parse as a date         REFUSED
+fee ↔ tax swapped          ->  tax is larger than the fee REFUSED
+```
+
+That last one matters most, because the footing identity **cannot see it** —
+`settled = gross − fee − tax` is symmetric in fee and tax, so every row still
+foots perfectly. What separates them is domain, not arithmetic: GST is charged
+*on* the commission, so tax is a fraction of fee and always the smaller. Stated
+as the assumption it is; a gateway that taxed differently would trip this
+honestly and go to a human.
+
+Measured on headers the alias table places **0 of 10** of (`Payout Batch Ref`,
+`Captured Value`, `Remitted To Bank`, `Levy On Charge`…), six live runs:
+
+```
+3 accepted — every column correct
+3 refused  — fell back to the mapping screen
+0 accepted but wrong
+```
+
+Non-deterministic in **coverage**, never in **correctness**. The same file can
+need the mapping screen on one run and not the next, which is a real wart; what
+it cannot do is quietly get a column wrong.
+
+**It is off by default**, and it is the one thing on that page that leaves your
+machine. Only **column headers** are sent — no rows, no amounts, no customer
+names, no narrations — because a header is the one part of a finance export that
+carries no financial data. The verification runs locally. With no key, or the box
+unticked, the alias table and the mapping screen carry it exactly as before.
+
 Two things about it are load-bearing:
 
 **It computes nothing.** Every route saves the uploads to a temp directory and
@@ -390,7 +438,7 @@ the number to watch on a book with more outstanding settlements than this one.
 
 ## Tests
 
-282 tests, 97% line coverage of `src/`.
+302 tests, 97% line coverage of `src/`.
 
 | File | What it holds |
 |---|---|
@@ -404,7 +452,8 @@ the number to watch on a book with more outstanding settlements than this one.
 | `test_close_gate.py` | every close condition, in both the blocking and the passing state |
 | `test_realistic_density.py` | the same code at ~3% fault density, not the fixture's ~56% |
 | `test_webapp.py` | the app's own edges: real-world headers, uploads not outliving the request, a holiday calendar not leaking into the next run |
-| `test_schema.py` | column resolution — and, more importantly, what it refuses to place |
+| `test_schema.py` | column resolution, and what it refuses to place |
+| `test_schema_llm.py` | a confidently wrong schema proposal, caught by verifying it against the file |
 | `test_audit.py` | the hash chain under tampering — including two attacks it does **not** catch |
 | `test_close_gate.py` | each of the seven conditions, and what must deliberately not block |
 
@@ -434,6 +483,7 @@ src/evaluate.py          ground-truth scoring, Wilson intervals, ablation
 src/reconcile.py         orchestrator, tier order, source degradation
 src/report.py            three-way match rate, exception list
 src/schema.py            their column names onto ours, by table not by guess
+src/schema_llm.py        tier 3 for schemas: propose a mapping, then verify it
 data/                    both batches + the ground-truth answer key
 app.py                   the local web app: three CSVs in, a close decision out
 webapp/static/desk.css   the close desk design system, one copy
@@ -441,7 +491,7 @@ webapp/static/desk.js    the render logic, one copy, shared by app and artifact
 webapp/static/upload.js  the intake screen: files in, report to Desk.render
 docs/build_dashboard.py  bakes a captured run into one self-contained HTML file
 data/make_realistic.py   a 2,000-order month at a density a merchant would know
-tests/                   282 tests
+tests/                   302 tests
 ```
 
 A committed sample run is in [`docs/`](docs/), generated by

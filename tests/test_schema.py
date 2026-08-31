@@ -127,6 +127,76 @@ def test_an_unknown_source_is_an_error_not_a_default():
         resolve(["a", "b"], "not_a_source")
 
 
+# ------------------------------------------------- verifying a mapping
+
+def settlements():
+    import pandas as pd
+    from pathlib import Path as P
+    return pd.read_csv(P(__file__).resolve().parent.parent
+                       / "data" / "razorpay_settlements.csv")
+
+
+def canonical(source):
+    spec = FIELDS[source]
+    return {f: f for f in spec["required"] + spec["optional"]}
+
+
+def test_a_correct_mapping_verifies():
+    from src.schema import verify_mapping
+
+    verdict = verify_mapping(settlements(), canonical("settlements"), "settlements")
+    assert verdict["ok"], verdict["failures"]
+
+
+@pytest.mark.parametrize("a,b,why", [
+    ("gross_amount", "settled_amount", "the settlement stops footing"),
+    ("fee", "gross_amount", "a fee the size of the sale is not a fee"),
+    ("settlement_date", "utr", "a reference does not parse as a date"),
+])
+def test_a_swapped_mapping_is_refused(a, b, why):
+    from src.schema import verify_mapping
+
+    swapped = canonical("settlements")
+    swapped[a], swapped[b] = swapped[b], swapped[a]
+    verdict = verify_mapping(settlements(), swapped, "settlements")
+    assert not verdict["ok"], f"{a}<->{b} should fail: {why}"
+
+
+def test_a_fee_tax_swap_is_refused_even_though_the_arithmetic_still_foots():
+    """
+    The one the footing identity cannot see. `settled = gross - fee - tax` is
+    symmetric in fee and tax, so swapping them leaves every row footing
+    perfectly while the report misstates what the gateway charged.
+
+    What separates them is domain rather than arithmetic: GST is charged ON the
+    commission, so tax is a fraction of fee and always the smaller of the two.
+    """
+    from src.schema import verify_mapping
+
+    swapped = canonical("settlements")
+    swapped["fee"], swapped["tax"] = swapped["tax"], swapped["fee"]
+    verdict = verify_mapping(settlements(), swapped, "settlements")
+
+    assert not verdict["ok"]
+    assert any("tax is smaller" in f for f in verdict["failures"])
+    # and the footing check genuinely did not catch it, which is the point
+    footing = next(c for c in verdict["checks"] if "foot" in c["check"])
+    assert footing["ok"]
+
+
+def test_verification_tolerates_the_faults_that_are_actually_injected():
+    """
+    A check that demanded perfection would refuse honest data: this batch has
+    five deliberately mis-footing settlements in it.
+    """
+    from src.schema import verify_mapping
+
+    verdict = verify_mapping(settlements(), canonical("settlements"), "settlements")
+    footing = next(c for c in verdict["checks"] if "foot" in c["check"])
+    assert footing["ok"]
+    assert "91%" in footing["detail"] or footing["ok"]
+
+
 # ------------------------------------------------ separate debit and credit
 
 def test_a_split_amount_statement_is_detected_as_a_shape_problem():

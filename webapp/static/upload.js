@@ -202,6 +202,7 @@
     var holidays = el("holidays").files[0];
     if (holidays) body.append("holidays", holidays);
     body.append("use_llm", el("useLlm").checked ? "1" : "0");
+    body.append("llm_schema", el("llmSchema").checked ? "1" : "0");
     return body;
   }
 
@@ -306,7 +307,8 @@
         var hint = document.createElement("div");
         hint.className = "hint";
         if (u.suggestion) {
-          hint.innerHTML = "Best guess: <b>" + u.suggestion + "</b>. Change it if that is wrong.";
+          hint.innerHTML = (u.from_model ? "Model's reading: <b>" : "Best guess: <b>")
+            + u.suggestion + "</b>. Change it if that is wrong.";
         } else if (u.note) {
           hint.textContent = u.note;
         } else {

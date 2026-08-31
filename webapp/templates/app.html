@@ -73,6 +73,17 @@
             and they will be counted.</span>
         </div>
         <div class="opt-row">
+          <label><input type="checkbox" id="llmSchema"> Let the model read column headers it does not recognise</label>
+          <span class="why">Off by default, because it is the one thing on this page that
+            leaves your machine. If a header has no recognisable equivalent, the
+            <b>column names only</b> — no rows, no amounts, no customer names — are sent to
+            <code>gpt-4o-mini</code> to propose what each one means. That proposal is then
+            checked against your file locally (do the amount columns hold amounts, does the
+            settlement foot against its own parts) and thrown away if it fails, so a
+            plausible-looking wrong answer cannot get through. Anything left over still goes
+            to the mapping screen for you to confirm.</span>
+        </div>
+        <div class="opt-row">
           <label><input type="checkbox" id="useLlm" checked> Use the language model to read mangled bank narrations</label>
           <span class="why">Off, or with no API key configured, the pipeline degrades honestly: those rows
             become reported exceptions rather than guesses. It never changes whether something counts as

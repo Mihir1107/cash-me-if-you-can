@@ -262,6 +262,139 @@ def merge_split_amount(df, debit_column, credit_column):
     return out
 
 
+# ---------------------------------------------------------------------------
+# Verifying a proposed mapping against the data it claims to describe.
+# ---------------------------------------------------------------------------
+#
+# A mapping is a claim about what each column MEANS, and a wrong one is the
+# quietest failure in this system: swap gross_amount and settled_amount and the
+# footing still foots, the identity still balances, and every figure in the
+# report is wrong with nothing anywhere to show for it.
+#
+# The rest of this project answers that shape of problem the same way every
+# time: let something propose, then have deterministic code check the proposal
+# against the data before it counts. That is what these do. The checks are
+# ordinary arithmetic on the file itself -- do the amount columns contain
+# amounts, do the date columns contain dates, does the settlement actually foot
+# -- and they are strong enough to catch every swap that matters.
+
+NUMERIC_FIELDS = {"amount", "gross_amount", "fee", "tax", "settled_amount",
+                  "refund_amount"}
+DATE_FIELDS = {"date", "settlement_date"}
+UNIQUE_FIELDS = {"ledger_id", "settlement_id", "txn_id"}
+
+# Injected faults are real, so a check that demanded perfection would fail on
+# honest data. These are the fractions below which a mapping is not plausible.
+PARSE_RATE = 0.90       # of non-blank values
+UNIQUE_RATE = 0.95
+FOOTING_RATE = 0.60     # settlements genuinely mis-foot; most should not
+FEE_RATIO_MAX = 0.25    # a fee column that is a quarter of gross is not a fee
+
+
+def _numeric(series):
+    import pandas as pd
+
+    return pd.to_numeric(series, errors="coerce")
+
+
+def _check(name, ok, detail):
+    return {"check": name, "ok": bool(ok), "detail": detail}
+
+
+def verify_mapping(df, mapping, source):
+    """
+    Does this mapping describe the data, or merely fit the headers?
+
+    Returns {"ok", "checks": [...], "failures": [...]}. A failure means the
+    mapping is refused -- not softened, not accepted with a warning -- because
+    the whole value of the check is that it is not negotiable.
+    """
+    import pandas as pd
+
+    checks = []
+    frame = apply_mapping(df, mapping)
+    rows = len(frame)
+    if not rows:
+        return {"ok": False, "checks": [], "failures": ["the file has no rows"]}
+
+    for field in sorted(NUMERIC_FIELDS & set(frame.columns)):
+        present = frame[field].astype(str).str.strip().replace("", pd.NA).dropna()
+        if present.empty:
+            continue
+        parsed = _numeric(present).notna().mean()
+        checks.append(_check(
+            f"{field} contains numbers", parsed >= PARSE_RATE,
+            f"{parsed:.0%} of values parse as a number "
+            f"(column {mapping[field]!r})"))
+
+    for field in sorted(DATE_FIELDS & set(frame.columns)):
+        present = frame[field].astype(str).str.strip().replace("", pd.NA).dropna()
+        if present.empty:
+            continue
+        parsed = pd.to_datetime(present, errors="coerce", format="mixed").notna().mean()
+        checks.append(_check(
+            f"{field} contains dates", parsed >= PARSE_RATE,
+            f"{parsed:.0%} of values parse as a date (column {mapping[field]!r})"))
+
+    for field in sorted(UNIQUE_FIELDS & set(frame.columns)):
+        ratio = frame[field].nunique(dropna=True) / rows
+        checks.append(_check(
+            f"{field} identifies rows", ratio >= UNIQUE_RATE,
+            f"{ratio:.0%} of values are distinct (column {mapping[field]!r})"))
+
+    # The strongest check available, and the one that catches a gross/settled
+    # swap: a settlement is supposed to foot against its own parts.
+    if source == "settlements" and {"gross_amount", "fee", "tax",
+                                    "settled_amount"} <= set(frame.columns):
+        gross = _numeric(frame["gross_amount"])
+        fee = _numeric(frame["fee"])
+        tax = _numeric(frame["tax"])
+        refund = (_numeric(frame["refund_amount"]) if "refund_amount" in frame
+                  else 0.0)
+        settled = _numeric(frame["settled_amount"])
+        expected = gross - fee - tax - refund
+        foots = ((settled - expected).abs() <= 1.0).mean()
+        checks.append(_check(
+            "settlements foot against gross, fee, tax and refund",
+            foots >= FOOTING_RATE,
+            f"{foots:.0%} of rows foot — a gross/settled swap shows up here"))
+
+        median_gross = gross.median()
+        median_fee = fee.median()
+
+        # Footing is SYMMETRIC in fee and tax -- settled = gross - fee - tax
+        # holds just as well with those two swapped -- so the identity cannot
+        # see that mistake at all. The consequence is milder than a gross/settled
+        # swap (the payout total stays right, the split is wrong) but it still
+        # misreports what the gateway charged, and `fee_rate_error` clustering
+        # in triage reads the wrong column.
+        #
+        # What separates them is domain, not arithmetic: Indian gateways charge
+        # GST *on the commission*, so tax is a fraction of fee and is always the
+        # smaller of the two. Stated as an assumption because it is one -- a
+        # gateway that taxed differently would trip this honestly, and the
+        # mapping would go to a human rather than through.
+        if "tax" in frame.columns:
+            median_tax = tax.median()
+            if pd.notna(median_tax) and pd.notna(median_fee) and median_fee:
+                checks.append(_check(
+                    "tax is smaller than the fee it is charged on",
+                    abs(median_tax) <= abs(median_fee),
+                    f"median tax {median_tax:,.2f} vs median fee {median_fee:,.2f} "
+                    f"— tax is charged on the fee, so it should be the smaller"))
+
+        # A fee the size of the sale is not a fee. Catches fee<->gross directly,
+        # which footing alone can miss when the arithmetic stays symmetric.
+        if median_gross and median_gross > 0:
+            ratio = abs(median_fee / median_gross)
+            checks.append(_check(
+                "the fee column is fee-sized", ratio <= FEE_RATIO_MAX,
+                f"median fee is {ratio:.0%} of median gross"))
+
+    failures = [c["check"] + ": " + c["detail"] for c in checks if not c["ok"]]
+    return {"ok": not failures, "checks": checks, "failures": failures}
+
+
 def apply_mapping(df, mapping):
     """
     Rename a frame's columns to the canonical names, keeping nothing else.

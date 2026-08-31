@@ -164,13 +164,13 @@ def _score_if_possible(data_dir):
     }
 
 
-def _run(data_dir, label, use_llm=True, mappings=None):
+def _run(data_dir, label, use_llm=True, mappings=None, llm_schema=False):
     """Run the real pipeline and package what the page needs."""
     out = Path(tempfile.mkdtemp())
     try:
         report, _ = run_reconciliation(
             data_dir=str(data_dir), output_dir=str(out), enable_llm=use_llm,
-            column_mappings=mappings)
+            column_mappings=mappings, allow_llm_schema=llm_schema)
         report["source_dir"] = label
         report.pop("exceptions", None)   # the page does not read it; it is large
 
@@ -231,6 +231,19 @@ def inspect():
             upload.stream.seek(0)
 
         found = schema.resolve(head.columns, slot)
+        if not found["ready"] and request.form.get("llm_schema") == "1":
+            # header names only -- see src/schema_llm.py. The proposal is
+            # verified against the file inside load_source before it is used;
+            # here it only pre-fills the mapping screen, which a human confirms.
+            from src import schema_llm
+
+            proposal = schema_llm.propose_mapping(
+                head.columns, slot, filename=upload.filename)
+            for u in found["unresolved"]:
+                guess = proposal["mapping"].get(u["field"])
+                if guess and guess in found["columns"]:
+                    u["suggestion"] = guess
+                    u["from_model"] = True
         found["filename"] = upload.filename
         found["label"] = HUMAN[slot]
         out[slot] = found
@@ -280,6 +293,7 @@ def reconcile():
         use_llm = request.form.get("use_llm", "1") == "1"
         names = ", ".join(request.files[s].filename for s in SLOTS)
         mappings = {slot: _mapping_from_request(slot) for slot in SLOTS}
+        llm_schema = request.form.get("llm_schema") == "1"
 
         # A holiday calendar applies to this run only, and is put back after,
         # so one request cannot change how the next one counts a window.
@@ -287,7 +301,8 @@ def reconcile():
         try:
             if holiday_path:
                 matcher.BANK_HOLIDAYS = matcher.load_bank_holidays(str(holiday_path))
-            return jsonify(_run(work, names, use_llm=use_llm, mappings=mappings))
+            return jsonify(_run(work, names, use_llm=use_llm, mappings=mappings,
+                                llm_schema=llm_schema))
         finally:
             matcher.BANK_HOLIDAYS = previous
 
