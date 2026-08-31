@@ -5,6 +5,8 @@ Entry point.
     python main.py --evaluate   also score the run against data/ground_truth.csv
     python main.py --alt        run the same code against a batch using an
                                 entirely different bank's conventions
+    python main.py --data DIR   run against any batch directory, e.g. the
+                                realistic-density one from data/make_realistic.py
     python main.py --prove      demonstrate live that a confidently wrong
                                 proposal still cannot become a match
     python main.py --brief      draft plain-English briefs for the top
@@ -37,6 +39,12 @@ if __name__ == "__main__":
     # conventions differ. See data/generate_alt_format.py.
     alt = "--alt" in sys.argv
     data_dir = "data/alt" if alt else "data"
+    if "--data" in sys.argv:
+        # An explicit directory wins over --alt; the two together is a typo, not
+        # a request, and silently honouring one of them hides it.
+        data_dir = sys.argv[sys.argv.index("--data") + 1]
+        alt = False
+        print(f"Running against {data_dir} — no code changes.\n")
     if alt:
         print("Running against the ALT-FORMAT batch "
               "(RRN/IMPS refs, flat+pct fees, T+1 cadence) — no code changes.\n")

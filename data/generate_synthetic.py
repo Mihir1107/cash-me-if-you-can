@@ -47,6 +47,17 @@ from datetime import datetime, timedelta
 random.seed(42)
 
 N_ORDERS = 55  # >50 per the brief
+
+# One order in every FAULT_MODULUS falls into each of the five modulo-driven
+# fault cases, so the modulo-driven density is 5/FAULT_MODULUS. At 12 that is
+# ~42%, plus the targeted cases below -- far denser than any real merchant, and
+# deliberately so: ten reason codes cannot be exercised across 57 orders at
+# realistic rates.
+#
+# Raising it thins the faults out without changing a single injection rule,
+# which is what `make_realistic.py` does to answer a different question: does
+# the controller drown in noise during a normal week?
+FAULT_MODULUS = 12
 START = datetime(2026, 8, 1)
 
 FEE_PCT = 0.02
@@ -108,7 +119,7 @@ def make_dataset():
         expected = "matched"
         note = "clean order, should reconcile on both legs"
 
-        case = i % 12
+        case = i % FAULT_MODULUS
 
         if case == 0:
             # Razorpay processed a partial refund; the merchant's ledger still
