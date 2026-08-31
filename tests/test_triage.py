@@ -240,3 +240,32 @@ def test_immaterial_incidents_print_in_their_own_section(capsys, workspace):
     if report["triage"]["material_incident_count"] < report["triage"]["incident_count"]:
         assert "Below the materiality threshold" in printed
         assert "Still reported, still counted" in printed
+
+
+def test_every_emittable_reason_code_has_a_routing_policy():
+    """
+    A code the pipeline emits on purpose must route to a team that can act on
+    it. Falling through to FALLBACK is correct for an unknown code and wrong for
+    one we ship: it manufactures manual work that nobody owns.
+
+    This is a guard, not a snapshot. It reads the codes straight out of the
+    source, so the next reason code added to matcher.py fails here until someone
+    decides who fixes it. `attribution_ambiguous` shipped unrouted for exactly
+    as long as nothing checked.
+    """
+    import re
+    from pathlib import Path
+
+    from src.triage import POLICY
+
+    src = Path(__file__).resolve().parent.parent / "src"
+    emitted = set()
+    for module in ("matcher.py", "reconcile.py"):
+        text = (src / module).read_text()
+        emitted |= set(re.findall(r'reason_code="([a-z_]+)"', text))
+        # two codes are chosen into a variable first, then emitted
+        emitted |= set(re.findall(r'reason = "([a-z_]+)"', text))
+
+    assert emitted, "found no reason codes at all -- the regex has gone stale"
+    unrouted = sorted(code for code in emitted if code not in POLICY)
+    assert not unrouted, f"reason codes with no owner: {unrouted}"

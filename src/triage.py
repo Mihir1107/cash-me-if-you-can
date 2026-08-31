@@ -128,6 +128,15 @@ POLICY = {
                   "land; chase only if this recurs for the same account.",
         "cluster": "delay_bucket",
     },
+    "attribution_ambiguous": {
+        "owner": "merchant_finance",
+        "urgency": "high",
+        "action": "Attribute by hand against the remittance advice. A credit "
+                  "arrived that matches this settlement's amount and timing, but "
+                  "it matches another settlement's just as well, so the agent "
+                  "refused to guess which one it belongs to.",
+        "cluster": "per_order",
+    },
     "credit_unattributed": {
         "owner": "merchant_finance",
         "urgency": "medium",
