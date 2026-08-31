@@ -424,6 +424,23 @@ def link_bank_rows(bank_df, known_utrs, extra_links=None, index=None):
                                 extra_links, known_utrs)
 
 
+def _could_have_produced(settlement_date, credit_date):
+    """
+    Could a credit dated `credit_date` have come from a settlement dated
+    `settlement_date`? This is the *same* rule Stage B enforces after a link is
+    made -- not before the settlement, not later than the payout window -- asked
+    earlier, to work out which settlements are genuine candidates for a credit.
+
+    A date we cannot read returns True. Being unable to rule a candidate out is
+    not evidence that it is the right one, and treating an unparseable date as a
+    disqualification would let bad data narrow an attribution.
+    """
+    if settlement_date is None or credit_date is None:
+        return True
+    gap = working_days_between(settlement_date, credit_date)
+    return 0 <= gap <= BANK_WINDOW_WORKING_DAYS
+
+
 def _filter_ambiguous_proposals(settlement_df, partition, extra_links):
     """
     Drop proposals whose credit could belong to more than one settlement.
@@ -440,6 +457,20 @@ def _filter_ambiguous_proposals(settlement_df, partition, extra_links):
     unresolved. A reference read directly out of the narration is unaffected --
     that is real evidence, not a guess, and it survives an amount collision.
 
+    **A rival has to be a real rival.** Amount alone over-counts them badly: at
+    5,000 orders it refused 20 healthy attributions, 16 of which had only one
+    candidate that could actually have produced the credit. So a settlement is
+    only counted as competing if the credit is date-feasible against it as well
+    -- same window Stage B applies, asked earlier. This narrows *who is
+    competing*; it never picks between competitors. Two settlements that are
+    both feasible are still refused, however confident the proposal, because at
+    that point there is genuinely nothing left to tell them apart.
+
+    Deliberately NOT used as a tie-break: payer strings, narration similarity to
+    other credits, or position in the statement. Those would let a proposal win
+    on evidence weaker than the verification it is bypassing, which is the exact
+    shape of the bug this filter exists to close.
+
     Returns (accepted, refused) as {txn_id: utr} dicts.
     """
     if not extra_links:
@@ -447,13 +478,21 @@ def _filter_ambiguous_proposals(settlement_df, partition, extra_links):
 
     already_linked, unresolved, _ = partition
 
-    # what each settlement group is still waiting for
-    expected_by_utr = {}
+    # what each settlement group is still waiting for, and when it was paid out
+    expected_by_utr, dates_by_utr = {}, {}
     for _, row in settlement_df.iterrows():
         amount = _num(row, "settled_amount")
         if amount is None:
             continue
         expected_by_utr.setdefault(row["utr"], []).append(amount)
+        dates_by_utr.setdefault(row["utr"], []).append(
+            _parse_date(_field(row, "settlement_date", None)))
+
+    # Stage B compares against the latest leg of a settlement, so the candidacy
+    # window has to start from the same date, or the two would disagree.
+    def latest_date(utr):
+        seen = [d for d in dates_by_utr.get(utr, []) if d is not None]
+        return max(seen) if seen else None
 
     uncredited = {utr: round(sum(amounts), 2)
                   for utr, amounts in expected_by_utr.items()
@@ -469,8 +508,11 @@ def _filter_ambiguous_proposals(settlement_df, partition, extra_links):
             accepted[txn_id] = utr
             continue
 
+        credit_date = _parse_date(_field(row, "date", None))
         rivals = [candidate for candidate, expected in uncredited.items()
-                  if abs(expected - amount) <= AMOUNT_TOLERANCE]
+                  if abs(expected - amount) <= AMOUNT_TOLERANCE
+                  and _could_have_produced(latest_date(candidate), credit_date)]
+
         if len(rivals) > 1:
             refused[txn_id] = utr
         else:

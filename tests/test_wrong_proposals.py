@@ -174,6 +174,69 @@ def test_an_equal_amount_collision_cannot_produce_a_match():
     assert verdicts(results)["order_A"] == ("exception", "attribution_ambiguous")
 
 
+def test_a_rival_that_could_not_have_produced_the_credit_is_not_a_rival():
+    """
+    Amount alone over-counts rivals. A settlement paid out weeks earlier cannot
+    be the source of this credit -- Stage B would reject that pairing on the date
+    window anyway -- so counting it as competition refuses an attribution that
+    was never actually ambiguous.
+
+    Measured cost of getting this wrong: at 5,000 orders the amount-only filter
+    refused 20 healthy attributions, 16 of which had exactly one date-feasible
+    candidate.
+    """
+    stale = dict(settlement("order_C", "UTR100007", 1000.00, "s3"))
+    stale["settlement_date"] = "2026-07-01"          # long out of the window
+    book = pd.DataFrame([
+        settlement("order_A", "UTR100005", 1000.00, "s1"),   # 2026-08-03
+        stale,
+    ])
+    credit = pd.DataFrame([bank("b1", 1000.00, "NEFT RZPY UTR10005 CR")])
+
+    links, _ = fuzzy_resolve([r for _, r in credit.iterrows()], set(book["utr"]))
+    results, _ = match_settlement_to_bank(
+        book, credit, {l["txn_id"]: l["utr_candidate"] for l in links})
+
+    # order_A is the only settlement this credit could have come from, so the
+    # proposal is allowed through and Stage B verifies it normally.
+    assert verdicts(results)["order_A"] == ("matched", "")
+    assert verdicts(results)["order_C"][0] == "exception"
+
+
+def test_date_narrowing_never_rescues_a_genuine_collision():
+    """
+    The control on the control. Narrowing decides *who is competing*; it must
+    never decide *between* competitors. Two settlements on the same day for the
+    same amount are both feasible, so the refusal has to stand.
+    """
+    credit = pd.DataFrame([bank("b1", 1000.00, "NEFT RZPY UTR10005 CR")])
+    links, _ = fuzzy_resolve([r for _, r in credit.iterrows()],
+                             set(EQUAL_AMOUNTS["utr"]))
+    results, _ = match_settlement_to_bank(
+        EQUAL_AMOUNTS, credit, {l["txn_id"]: l["utr_candidate"] for l in links})
+
+    assert not [r for r in results if r.status == "matched"]
+    assert verdicts(results)["order_A"] == ("exception", "attribution_ambiguous")
+
+
+def test_an_unreadable_date_does_not_narrow_an_attribution():
+    """
+    Bad data must not be able to resolve an ambiguity. If a rival's date cannot
+    be parsed we cannot rule it out, so it stays a rival and the proposal is
+    still refused.
+    """
+    undated = dict(settlement("order_C", "UTR100007", 1000.00, "s3"))
+    undated["settlement_date"] = "not a date"
+    book = pd.DataFrame([settlement("order_A", "UTR100005", 1000.00, "s1"), undated])
+    credit = pd.DataFrame([bank("b1", 1000.00, "NEFT RZPY UTR10005 CR")])
+
+    links, _ = fuzzy_resolve([r for _, r in credit.iterrows()], set(book["utr"]))
+    results, _ = match_settlement_to_bank(
+        book, credit, {l["txn_id"]: l["utr_candidate"] for l in links})
+
+    assert not [r for r in results if r.status == "matched"]
+
+
 def test_a_direct_narration_read_survives_an_amount_collision():
     """
     Control, and the reason the fix is a filter on *proposals* rather than a
