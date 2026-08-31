@@ -11,7 +11,8 @@ pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --prove           # 30 seconds: watch a wrong proposal get refused
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 175 tests
+python -m pytest tests/ -q       # 257 tests
+python app.py                    # the app: drop in three CSVs, get a close decision
 ```
 
 ## Read this part first
@@ -115,18 +116,20 @@ The decision reconciliation exists to support, so the agent answers it:
 
 ```
 PERIOD CLOSE: BLOCKED
-4 of 7 conditions fail. 504,718.32 is unresolved.
+4 of 7 conditions fail. 460,320.66 is unresolved.
 
 1. revenue_recorded               28,876.92   2 settlements received for orders
                                               the ledger never booked
 2. reversals_booked               13,381.50
-3. cash_attributable              43,868.63
-4. material_exceptions_resolved  418,591.27
+3. cash_attributable              21,669.80
+4. material_exceptions_resolved  396,392.44
 
 Passing: audit_trail_intact, sources_verifiable, books_balance
 ```
 
-Immaterial exceptions and late-but-arrived credits deliberately do not block.
+Sub-threshold exceptions and late-but-arrived credits deliberately do not block.
+Nor do qualitative overrides exist here: a real close can be held open by a small
+item whose *nature* matters, and this gate does not model that.
 
 ## An audit trail that proves it was not edited
 
@@ -167,8 +170,9 @@ exposure.
 ## Triage: who fixes what
 
 ```
-33 exception rows cluster into 11 incidents, 10 above the materiality
-threshold of 3,322.13 (0.5% of exposure, floored at 1,000.00)
+33 exception rows cluster into 11 incidents, 10 above the triage
+threshold of 3,322.13 (0.5% of this run's exposure, floored at 1,000.00.
+Operational triage heuristic, not audit materiality under SA 320 / ISA 320.)
 
 owner                incidents  orders   value at risk
 razorpay_support             5      19      238,198.35
@@ -246,7 +250,14 @@ language: narrations quoting *two* real references, a reversal and a credit,
 where only the surrounding words decide which is which. Live, it picked the
 credit reference both times and ignored the same reversal reference both times.
 
-A default run makes **two model calls at any batch size**.
+A default run makes **three model calls, two of which resolve a reference**. The
+count is the same at 57, 502 and 5,000 orders — but that is a property of this
+fixture, not a guarantee: the generator injects exactly three narrations the
+deterministic tiers cannot recover (two quoting two references, one quoting
+none). Everything that *does* scale, the fuzzy tier absorbs for free — 5
+recoveries at 57 orders, 42 at 502, 417 at 5,000, still zero API calls. On real
+data, Tier 3 volume would track how many narrations are genuinely unrecoverable,
+not how many orders there are.
 
 ## Not tuned to its own fixture
 
@@ -260,32 +271,132 @@ narrations. No line of `src/` changes:
 exact reason-code accuracy 100.00%   |   money identity holds
 ```
 
+## The app
+
+A controller does not have Python. So the pipeline has a front end:
+
+```bash
+python app.py        # then open http://127.0.0.1:5051
+```
+
+Drag in three CSVs — your ledger, the Razorpay settlement report, the bank
+statement — and get back the close decision, the money at risk by reason, and a
+work queue routed to whoever has to fix each thing. Download the report and the
+audit trail from the same screen. There is a **Try it with sample data** button
+if you just want to see it work.
+
+Two things about it are load-bearing:
+
+**It computes nothing.** Every route saves the uploads to a temp directory and
+calls the same `run_reconciliation()` that `main.py` calls. There is no second
+implementation of the matching logic in JavaScript and there must never be one —
+three bugs here came from shared logic having a copy that drifted, and the copy
+that must never drift is the one deciding whether money matched.
+
+**Nothing leaves the machine.** It binds to localhost, the uploads are deleted
+when the request finishes, and the only outbound call the process can make is
+Tier 3's narration lookup — one bank narration string, no amounts, and only if a
+key is configured. There is a checkbox to turn it off. A merchant's ledger is
+not something to be casual about.
+
+Errors are written for the person holding the file, not the person who wrote the
+parser: a near-miss export comes back as *"your ledger is missing `amount`,
+re-export with that column"*, naming which of the three files and highlighting
+it, rather than a stack trace.
+
+The scorecard is deliberately **absent** on your own data. There is no answer key
+for a real merchant's month — if they knew which rows were wrong they would not
+need this — and a blank scorecard reads as "checked, found nothing". Run a
+sample and it fills in, because the generator recorded what it broke.
+
+### A captured run, for people who won't install anything
+
+```bash
+python data/make_realistic.py      # a 2,000-order month at ~3% faults
+python docs/build_dashboard.py     # -> docs/close-desk.html, self-contained
+```
+
+Same design, same render code, no server — a single HTML file with three runs
+baked in, for a README link or a judge who is not going to clone a repo. It
+carries three runs of the same code and switches between them:
+
+| | orders | fault density | match rate | incidents | close gate |
+|---|---|---|---|---|---|
+| Real month | 2,000 | ~3% | 97.20% | 10, of which 2 material | 2 of 7 fail |
+| Test fixture | 57 | ~56% | 42.11% | 11, of which 10 material | 4 of 7 fail |
+| At volume | 5,000 | ~56% | 58.10% | 15 | 2 of 7 fail |
+
+That switch is the honest answer to "your match rate is only 42%". At a density
+a real merchant would recognise, 2,000 orders becomes ten incidents and two
+things worth doing today — and the batch at volume is the only one where the
+ambiguity filter actually refuses anything, so the mechanism this project is
+built around is visible rather than asserted.
+
 ## Throughput
 
-| Orders | Wall clock | Records/sec | Faults caught | Missed |
-|---|---|---|---|---|
-| 57 | 6.3 ms | 17,038 | 32 / 32 | **0** |
-| 502 | 51.3 ms | 18,713 | 217 / 217 | **0** |
-| 5,000 | 544.9 ms | 17,585 | 2,090 / 2,090 | **0** |
+| Orders | Wall clock | Records/sec | Faults caught | Missed | False positives |
+|---|---|---|---|---|---|
+| 57 | 7.9 ms | 13,613 | 32 / 32 | **0** | 3 |
+| 502 | 61.3 ms | 15,663 | 217 / 217 | **0** | 3 |
+| 5,000 | 658.3 ms | 14,555 | 2,090 / 2,090 | **0** | 7 |
 
-Best of three. With Tier 3 on the batch takes 8,124 ms, of which 8,101 ms is
-three API calls; the deterministic pipeline is the remaining 23 ms.
+Best of three, no API key, regenerated by `python docs/benchmark.py`. The
+generator is seeded, so every column but the timings reproduces exactly.
+
+With Tier 3 on, the same batch takes seconds rather than milliseconds: 5,336 ms
+in the committed sample run, of which 5,315 ms is three API calls and 21 ms is
+the deterministic pipeline. The deterministic part is the stable number. API
+latency is not — it moved between 4.0 and 5.3 seconds across runs of the same
+three calls, which is the honest reason cost and latency here scale with
+unrecoverable narrations rather than with orders.
+
+**Detection holds at every scale. Precision drifts, and the reason is the
+ambiguity filter.** At 5,000 orders, 4 of those 7 false positives are
+`attribution_ambiguous` on healthy orders: the more settlements are outstanding,
+the more often two of them expect the same amount, and the filter refuses rather
+than guesses.
+
+Refusing on amount alone was too blunt: it cost 20 healthy orders at 5,000, and
+16 of those had only one settlement the credit could actually have come from. So
+a rival has to be a *real* rival — the credit must be date-feasible against it
+too, which is the same window Stage B enforces anyway, asked earlier. A payout
+made three weeks ago was never competing for today's credit. That is narrowing
+*who is competing*, never picking between competitors: two settlements that are
+both feasible are still refused, at any confidence. 20 false refusals became 4.
+
+It fires zero times at 57 and 502 orders. That is the cost of the
+guarantee, and it is a real cost — it turns clean orders into manual work as the
+book grows. At this fault density it stays small, 4 orders in 5,000, but it is
+the number to watch on a book with more outstanding settlements than this one.
 
 ## Tests
 
-175 tests, 98% line coverage.
+257 tests, 97% line coverage of `src/`.
 
 | File | What it holds |
 |---|---|
-| `test_wrong_proposals.py` | upstream tiers being confidently wrong |
+| `test_wrong_proposals.py` | upstream tiers being confidently wrong, including the equal-amount collision and its control case |
 | `test_stress.py` | 29 adversarial cases written to break the pipeline |
 | `test_properties.py` | invariants over hypothesis-generated batches |
 | `test_generalize.py` | the alt-convention run, as a regression |
-| `test_brief.py` | the fabrication guard |
+| `test_brief.py` | the fabrication guard, numbers and currency |
 | `test_output.py` | the printed summary, including degraded shapes |
+| `test_audit.py` | the hash chain, attacked directly rather than sideways |
+| `test_close_gate.py` | every close condition, in both the blocking and the passing state |
+| `test_realistic_density.py` | the same code at ~3% fault density, not the fixture's ~56% |
+| `test_webapp.py` | the app's own edges: a named missing column, uploads not outliving the request, a holiday calendar not leaking into the next run |
+| `test_audit.py` | the hash chain under tampering — including two attacks it does **not** catch |
+| `test_close_gate.py` | each of the seven conditions, and what must deliberately not block |
 
 The load-bearing property: *a match always has bank confirmation*, asserted over
 arbitrary generated input rather than the batch I happened to write.
+
+Coverage is close to even: `close_gate` 100%, `fuzzy_resolver` 100%, `audit`
+99%, `matcher` 98%. The thinnest are `brief` at 94% and `llm_resolver` at 95%,
+and what is uncovered there is the `except ImportError` fallback for the openai
+import plus one attach-path branch — not logic that decides a verdict. The two
+files carrying the project's honesty claims, `audit` and `close_gate`, were the
+weakest here until they got test modules of their own.
 
 ## Layout
 
@@ -294,7 +405,7 @@ src/matcher.py           Stage A + Stage B, fully deterministic
 src/fuzzy_resolver.py    Tier 2, string recovery, zero LLM calls
 src/llm_resolver.py      Tier 3, the model proposes, never confirms
 src/money.py             value reconciliation + the accounting identity
-src/triage.py            incident clustering, routing, materiality
+src/triage.py            incident clustering, routing, triage threshold
 src/close_gate.py        the period close decision
 src/brief.py             model phrases, deterministic code verifies
 src/audit.py             append-only, hash-chained decision log
@@ -303,11 +414,25 @@ src/evaluate.py          ground-truth scoring, Wilson intervals, ablation
 src/reconcile.py         orchestrator, tier order, source degradation
 src/report.py            three-way match rate, exception list
 data/                    both batches + the ground-truth answer key
-tests/                   175 tests
+app.py                   the local web app: three CSVs in, a close decision out
+webapp/static/desk.css   the close desk design system, one copy
+webapp/static/desk.js    the render logic, one copy, shared by app and artifact
+webapp/static/upload.js  the intake screen: files in, report to Desk.render
+docs/build_dashboard.py  bakes a captured run into one self-contained HTML file
+data/make_realistic.py   a 2,000-order month at a density a merchant would know
+tests/                   257 tests
 ```
 
 A committed sample run is in [`docs/`](docs/), generated by
-`docs/capture_sample_run.py` rather than pasted.
+`docs/capture_sample_run.py` rather than pasted, and the throughput table above
+by `docs/benchmark.py`. Both write the numbers this README quotes, so a figure
+here that disagrees with the code is a script away from being caught.
+
+`docs/audit_trail_sample.jsonl` is an excerpt of one run's trail, sampled for a
+spread of decision shapes. It deliberately does not verify as a hash chain —
+non-consecutive entries are exactly what `verify_chain()` rejects. The full
+trail it came from verifies, which is what `audit_trail_intact` reports in the
+close gate above.
 
 ## Limits
 
@@ -320,10 +445,24 @@ A committed sample run is in [`docs/`](docs/), generated by
 - `credit_unattributed` cannot distinguish "money never arrived" from "money
   arrived and we could not attribute it" beyond an amount heuristic. Amount
   equality is weak evidence of identity; neither state becomes a match, but the
-  two exceptions can be labelled the wrong way round.
+  two exceptions can be labelled the wrong way round. This is the only source of
+  false positives on the 57-order batch, at both key states.
+- **The ambiguity filter's cost grows with the book.** It never creates a false
+  match, but it refuses healthy attributions at a rate that rises with how many
+  settlements are outstanding — zero at 57 and 502 orders, 4 at 5,000 — and
+  nothing currently bounds that rate. See Throughput.
+- `attribution_ambiguous` clusters `per_order`, so every collision becomes its
+  own incident for `merchant_finance` rather than one incident naming the credit
+  that two settlements both claim. Right owner, right action, more queue items
+  than the underlying problem deserves.
 - The settlement window counts **bank working days** (excluding Sundays and the
-  second and fourth Saturday, per Razorpay's documented T+2 working-day cycle)
-  but does **not** model public holidays, so a credit delayed only by a holiday
+  second and fourth Saturday, per Razorpay's documented T+2 working-day cycle).
+  Public holidays are supported but **not populated**: `matcher.BANK_HOLIDAYS` is
+  empty and `load_bank_holidays()` reads a `date,name` CSV, so the calendar is
+  the deployer's to supply from the RBI notification for the period. Shipping a
+  half-remembered holiday list would be worse than shipping none — a wrong date
+  silently changes whether a real payout reads as late, where a missing one is at
+  least this paragraph. Until one is supplied, a credit delayed only by a holiday
   can still be flagged.
 - The settlement arithmetic is `gross − fee − tax − refund`. Real Razorpay
   settlements also carry adjustments, transfers and disputes. This models a

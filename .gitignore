@@ -2,7 +2,7 @@
 output/*
 !output/.gitkeep
 
-# Secrets. The pipeline reads ANTHROPIC_API_KEY from the environment only;
+# Secrets. The pipeline reads OPENAI_API_KEY from the environment only;
 # no key is ever written to a file in this repo.
 .env
 .env.*
@@ -11,6 +11,7 @@ output/*
 credentials.json
 
 # Python
+.coverage
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -32,3 +33,5 @@ FORM_ANSWERS.md
 
 # Research brief for external analysis, not part of the submission
 PROJECT_BRIEF.md
+
+CLAUDE.md
