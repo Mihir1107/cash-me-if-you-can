@@ -29,9 +29,9 @@ AMOUNT_TOLERANCE = 1.0  # paise-level rounding tolerance, in rupees
 # calendar days later and still be perfectly on time. Counting working days
 # removes that false positive.
 #
-# Public holidays are NOT modelled. That needs a per-year Indian bank calendar,
-# which is a data problem rather than a logic one, so this under-counts the
-# window around a holiday and can still flag a late-but-legitimate credit.
+# Public holidays are modelled but not populated: see BANK_HOLIDAYS below. With
+# no calendar supplied this under-counts the window around a holiday and can
+# still flag a late-but-legitimate credit.
 BANK_WINDOW_WORKING_DAYS = 3
 
 # Ledger statuses that show the merchant knows a refund happened.
@@ -49,33 +49,93 @@ class MatchResult:
     detail: dict = field(default_factory=dict)
 
 
-def is_bank_working_day(day):
+# Bank holidays, as {date: name}. Empty by default, and deliberately so.
+#
+# The holiday calendar is a *data* problem, not a logic one: RBI publishes it
+# per year and per state, it moves with lunar dates, and a wrong entry silently
+# changes whether a real payout is reported late. Shipping a half-remembered
+# list would be worse than shipping none, because a wrong date is invisible
+# where a missing one is at least a stated limitation.
+#
+# So the mechanism is here and the data is yours to supply, from the RBI holiday
+# notification for the period you are reconciling:
+#
+#     from datetime import date
+#     from src import matcher
+#     matcher.BANK_HOLIDAYS = {date(2026, 8, 15): "Independence Day"}
+#
+# `load_bank_holidays()` reads the same thing from a CSV so it does not have to
+# live in code at all.
+BANK_HOLIDAYS = {}
+
+
+def load_bank_holidays(path):
     """
-    Indian bank working day: not Sunday, not the second or fourth Saturday.
-    Public holidays are not modelled; see BANK_WINDOW_WORKING_DAYS.
+    Read a bank holiday calendar from a two-column CSV: `date,name`.
+
+    Returns {date: name}. Unreadable rows are skipped rather than raising -- a
+    malformed holiday file should narrow the calendar, not kill the batch -- and
+    the count of what was loaded is returned to the caller's eye via the dict
+    length, so a silently empty file is visible.
+    """
+    import csv
+
+    holidays = {}
+    with open(path, newline="") as handle:
+        for row in csv.DictReader(handle):
+            when = _parse_date(row.get("date"))
+            if when is not None:
+                holidays[_as_date(when)] = (
+                    (row.get("name") or "").strip() or "bank holiday")
+    return holidays
+
+
+def is_bank_working_day(day, holidays=None):
+    """
+    Indian bank working day: not Sunday, not the second or fourth Saturday, and
+    not a published bank holiday.
+
+    Holidays default to the module-level BANK_HOLIDAYS, which is empty unless a
+    calendar has been supplied. With none supplied this under-counts the window
+    around a holiday and can still flag a legitimate credit as delayed -- the
+    behaviour is unchanged from before the calendar existed, and stated as a
+    limitation rather than papered over with invented dates.
     """
     if day.weekday() == 6:              # Sunday
         return False
     if day.weekday() == 5:              # Saturday
         nth = (day.day - 1) // 7 + 1    # which Saturday of the month
-        return nth not in (2, 4)
-    return True
+        if nth in (2, 4):
+            return False
+    calendar = BANK_HOLIDAYS if holidays is None else holidays
+    if not calendar:
+        return True
+    # The pipeline parses dates into datetimes, while a calendar is naturally
+    # written as plain dates. Comparing the two directly never matches, and it
+    # fails *silently* -- every holiday simply stops counting. So normalise both
+    # sides to a plain date before the lookup.
+    return _as_date(day) not in {_as_date(d) for d in calendar}
 
 
-def working_days_between(start, end):
+def working_days_between(start, end, holidays=None):
     """
     Bank working days strictly after `start`, up to and including `end`.
     Negative when end precedes start, so an impossible ordering stays visible.
     """
     if end < start:
-        return -working_days_between(end, start)
+        return -working_days_between(end, start, holidays)
     days = 0
     cursor = start
     while cursor < end:
         cursor += timedelta(days=1)
-        if is_bank_working_day(cursor):
+        if is_bank_working_day(cursor, holidays):
             days += 1
     return days
+
+
+def _as_date(value):
+    """A datetime and the date it falls on are the same day to a bank calendar."""
+    return value.date() if hasattr(value, "date") else value
 
 
 def _parse_date(s):

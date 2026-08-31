@@ -455,3 +455,71 @@ def test_reusing_the_scan_still_discards_a_proposal_for_an_unknown_settlement():
         partition=link_bank_rows(credits, {"UTR900001"}))
 
     assert not [r for r in results if r.status == "matched"]
+
+
+# ------------------------------------------------- the bank holiday calendar
+
+def test_a_holiday_lengthens_the_settlement_window():
+    """
+    The reason the calendar exists. A credit that crosses a holiday spans more
+    calendar days than working ones, and without the holiday in the calendar it
+    reads as late.
+    """
+    from datetime import date
+
+    from src.matcher import working_days_between
+
+    # Sat 15th is the 3rd Saturday, so banks work it; Sun 16th they do not.
+    friday, wednesday = date(2026, 8, 14), date(2026, 8, 19)
+    assert working_days_between(friday, wednesday) == 4          # no calendar
+
+    holiday = {date(2026, 8, 17): "a bank holiday"}
+    assert working_days_between(friday, wednesday, holiday) == 3
+
+
+def test_the_default_calendar_is_empty_not_guessed():
+    """
+    A wrong holiday date is invisible; a missing one is a stated limitation.
+    So the shipped calendar is empty and the data is the deployer's to supply.
+    """
+    from src.matcher import BANK_HOLIDAYS
+
+    assert BANK_HOLIDAYS == {}
+
+
+def test_a_holiday_is_not_a_working_day():
+    from datetime import date
+
+    from src.matcher import is_bank_working_day
+
+    monday = date(2026, 8, 17)
+    assert is_bank_working_day(monday)
+    assert not is_bank_working_day(monday, {monday: "Independence Day (observed)"})
+
+
+def test_a_malformed_holiday_row_is_skipped_not_fatal(tmp_path):
+    """A broken calendar file must narrow the window, never kill the batch."""
+    from datetime import date
+
+    from src.matcher import load_bank_holidays
+
+    path = tmp_path / "holidays.csv"
+    path.write_text("date,name\n2026-08-15,Independence Day\nnot-a-date,junk\n,\n")
+
+    loaded = load_bank_holidays(str(path))
+    assert loaded == {date(2026, 8, 15): "Independence Day"}
+
+
+def test_a_holiday_counts_whether_it_is_written_as_a_date_or_a_datetime():
+    """
+    The pipeline parses dates into datetimes; a calendar is naturally written as
+    plain dates. Comparing the two directly never matches, and it fails silently
+    -- every holiday just stops counting. Both forms must work.
+    """
+    from datetime import date, datetime
+
+    from src.matcher import is_bank_working_day
+
+    monday = datetime(2026, 8, 17)
+    assert not is_bank_working_day(monday, {date(2026, 8, 17): "holiday"})
+    assert not is_bank_working_day(monday.date(), {datetime(2026, 8, 17): "holiday"})
