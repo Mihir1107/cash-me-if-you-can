@@ -29,6 +29,7 @@ from src.audit import AuditTrail, verify_chain
 from src.close_gate import evaluate_close
 from src.money import build_exposure_index
 from src.report import build_report, print_summary, save_report
+from src import schema
 
 REQUIRED_COLUMNS = {
     "ledger": {"ledger_id", "order_id", "amount", "date"},
@@ -39,22 +40,74 @@ REQUIRED_COLUMNS = {
 
 
 class SourceUnavailable(Exception):
-    """A source file is missing, unreadable, or structurally wrong."""
+    """
+    A source file is missing, unreadable, or structurally wrong.
+
+    Carries the facts as attributes rather than only in the message. Callers
+    that need to explain this to a person -- the web app does -- were parsing
+    the prose back out with string splits, which broke the moment the wording
+    changed. The wording is for humans; these are for code.
+    """
+
+    def __init__(self, message, source=None, missing=None, columns=None):
+        super().__init__(message)
+        self.source = source              # "ledger" | "settlements" | "bank"
+        self.missing = list(missing or [])   # required fields not resolved
+        self.columns = list(columns or [])   # what the file actually has
 
 
-def load_source(path, name):
-    """Read one CSV and check it carries the columns this pipeline relies on."""
+def load_source(path, name, mapping=None):
+    """
+    Read one CSV and get it into the column names this pipeline relies on.
+
+    Nobody's real export uses these names, so `src/schema.py` maps theirs onto
+    ours -- deterministically, by a curated alias table, never by guessing. Pass
+    an explicit `mapping` ({field: their column}) to override, which is what the
+    web app sends once a human has confirmed the columns it could not place.
+
+    Raises SourceUnavailable when a required field cannot be resolved. The
+    message carries the columns the file actually has, because "missing
+    order_id" is unhelpful next to a file whose column is called "Order Ref".
+    """
     try:
         df = pd.read_csv(path)
     except Exception as e:
-        raise SourceUnavailable(f"{name} could not be read from {path}: {e}") from e
+        raise SourceUnavailable(
+            f"{name} could not be read from {path}: {e}", source=name) from e
 
-    missing = REQUIRED_COLUMNS[name] - set(df.columns)
+    if mapping:
+        resolved = dict(mapping)
+    else:
+        found = schema.resolve(df.columns, name)
+        if found["split_amount"] and not found["ready"]:
+            # a statement with separate debit and credit columns: a different
+            # shape rather than a different spelling, so convert before mapping
+            df = schema.merge_split_amount(df, found["split_amount"]["debit"],
+                                           found["split_amount"]["credit"])
+            found = schema.resolve(df.columns, name)
+        if not found["ready"]:
+            missing = [u["field"] for u in found["unresolved"] if u["required"]]
+            raise SourceUnavailable(
+                f"{name} at {path} is missing required columns: {sorted(missing)}"
+                f" (columns found: {list(df.columns)})",
+                source=name, missing=sorted(missing), columns=list(df.columns),
+            )
+        resolved = found["mapping"]
+
+    absent = [c for c in resolved.values() if c not in df.columns]
+    if absent:
+        raise SourceUnavailable(
+            f"{name} at {path} was mapped to columns it does not have: {absent}",
+            source=name, columns=list(df.columns),
+        )
+
+    missing = REQUIRED_COLUMNS[name] - set(resolved)
     if missing:
         raise SourceUnavailable(
-            f"{name} at {path} is missing required columns: {sorted(missing)}"
+            f"{name} at {path} is missing required columns: {sorted(missing)}",
+            source=name, missing=sorted(missing), columns=list(df.columns),
         )
-    return df
+    return schema.apply_mapping(df, resolved)
 
 
 def _degrade_stage_b(settlements, reason):
@@ -117,12 +170,18 @@ def _throughput(order_count, bank, timings, t_start, llm_calls):
 
 
 def run_reconciliation(data_dir="data", output_dir="output",
-                       enable_fuzzy=True, enable_llm=True, write_outputs=True):
+                       enable_fuzzy=True, enable_llm=True, write_outputs=True,
+                       column_mappings=None):
     """
     enable_fuzzy / enable_llm exist so the evaluator can ablate the tiers and
     measure what each one is actually worth. Turning a tier off never turns a
     row into a match -- it turns it into an honest exception.
+
+    column_mappings is {source: {field: their column}}, for files whose headers
+    the alias table could not place on its own. It only ever arrives from a
+    human who was shown the columns and chose -- nothing guesses one.
     """
+    column_mappings = column_mappings or {}
     audit = AuditTrail()
     timings = {}
     t_start = time.perf_counter()
@@ -138,8 +197,10 @@ def run_reconciliation(data_dir="data", output_dir="output",
     # no reconciliation to run, and pretending otherwise would report a match
     # rate computed over nothing. Fail loudly instead.
     ledger, settlements = stage("load_sources", lambda: (
-        load_source(f"{data_dir}/internal_ledger.csv", "ledger"),
-        load_source(f"{data_dir}/razorpay_settlements.csv", "settlements"),
+        load_source(f"{data_dir}/internal_ledger.csv", "ledger",
+                    column_mappings.get("ledger")),
+        load_source(f"{data_dir}/razorpay_settlements.csv", "settlements",
+                    column_mappings.get("settlements")),
     ))
 
     # --- Stage A: ledger <-> settlement (deterministic) ---
@@ -155,7 +216,8 @@ def run_reconciliation(data_dir="data", output_dir="output",
     bank = None
     bank_error = None
     try:
-        bank = load_source(f"{data_dir}/bank_statement.csv", "bank")
+        bank = load_source(f"{data_dir}/bank_statement.csv", "bank",
+                           column_mappings.get("bank"))
     except SourceUnavailable as e:
         bank_error = str(e)
 

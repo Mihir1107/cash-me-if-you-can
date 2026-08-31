@@ -192,14 +192,194 @@
       });
   }
 
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
+  /* ---------------------------------------------------- the mapping step */
+
+  var chosen = {};     // {slot: {field: their column}}
+
+  function baseBody() {
     var body = new FormData();
     SLOTS.forEach(function (s) { body.append(s, picked[s]); });
     var holidays = el("holidays").files[0];
     if (holidays) body.append("holidays", holidays);
     body.append("use_llm", el("useLlm").checked ? "1" : "0");
+    return body;
+  }
+
+  function runReconcile() {
+    var body = baseBody();
+    SLOTS.forEach(function (s) {
+      if (chosen[s] && Object.keys(chosen[s]).length) {
+        body.append("mapping_" + s, JSON.stringify(chosen[s]));
+      }
+    });
     post("/api/reconcile", body);
+  }
+
+  function mapReadiness() {
+    var missing = 0;
+    SLOTS.forEach(function (slot) {
+      var need = (window.__inspect[slot].unresolved || [])
+        .filter(function (u) { return u.required; });
+      need.forEach(function (u) {
+        if (!(chosen[slot] || {})[u.field]) missing++;
+      });
+    });
+    el("mapRun").disabled = missing > 0;
+    el("mapReadiness").textContent = missing
+      ? missing + " still to choose."
+      : "Ready.";
+    return missing;
+  }
+
+  function renderMapping(sources) {
+    window.__inspect = sources;
+    chosen = {};
+    var host = el("mapFiles");
+    host.innerHTML = "";
+
+    SLOTS.forEach(function (slot) {
+      var info = sources[slot];
+      chosen[slot] = {};
+      Object.keys(info.mapping).forEach(function (f) {
+        chosen[slot][f] = info.mapping[f];
+      });
+
+      var need = (info.unresolved || []).filter(function (u) { return u.required; });
+      var optional = (info.unresolved || []).filter(function (u) { return !u.required; });
+
+      var box = document.createElement("div");
+      box.className = "map-file";
+
+      var head = document.createElement("header");
+      head.innerHTML = "<div><h3>" + info.label.replace(/^./, function (c) {
+        return c.toUpperCase();
+      }) + '</h3><div class="fname">' + info.filename + "</div></div>"
+        + '<span class="state ' + (need.length ? "todo" : "ok") + '">'
+        + (need.length ? need.length + " to choose" : "all recognised") + "</span>";
+      box.appendChild(head);
+
+      if (info.split_amount) {
+        var note = document.createElement("div");
+        note.className = "map-note";
+        note.innerHTML = "This statement keeps money in two columns — <code>"
+          + info.split_amount.debit + "</code> and <code>" + info.split_amount.credit
+          + "</code>. They will be combined into one amount, and the direction kept, "
+          + "so a reversal is still recognised as one.";
+        box.appendChild(note);
+      }
+
+      var rows = document.createElement("div");
+      rows.className = "map-rows";
+
+      need.concat(optional).forEach(function (u) {
+        var row = document.createElement("div");
+        row.className = "map-row";
+
+        var label = document.createElement("div");
+        label.className = "field";
+        label.innerHTML = u.field + (u.required ? '<span class="req">*</span>' : "");
+        row.appendChild(label);
+
+        var select = document.createElement("select");
+        select.innerHTML = '<option value="">— not in this file —</option>'
+          + info.columns.map(function (c) {
+              return '<option value="' + c.replace(/"/g, "&quot;") + '">' + c + "</option>";
+            }).join("");
+        if (u.suggestion) select.value = u.suggestion;
+        if (u.required && !select.value) select.classList.add("unset");
+
+        select.addEventListener("change", function () {
+          if (select.value) {
+            chosen[slot][u.field] = select.value;
+            select.classList.remove("unset");
+          } else {
+            delete chosen[slot][u.field];
+            if (u.required) select.classList.add("unset");
+          }
+          mapReadiness();
+        });
+        // a suggestion is pre-selected but still counts as chosen only once it
+        // is in the box in front of the person, which it now is
+        if (select.value) chosen[slot][u.field] = select.value;
+        row.appendChild(select);
+
+        var hint = document.createElement("div");
+        hint.className = "hint";
+        if (u.suggestion) {
+          hint.innerHTML = "Best guess: <b>" + u.suggestion + "</b>. Change it if that is wrong.";
+        } else if (u.note) {
+          hint.textContent = u.note;
+        } else {
+          hint.textContent = "No column looked like this one.";
+        }
+        row.appendChild(hint);
+
+        rows.appendChild(row);
+      });
+
+      if (!rows.children.length) {
+        var ok = document.createElement("div");
+        ok.className = "map-rows";
+        ok.innerHTML = '<div class="map-row resolved"><div class="field">'
+          + Object.keys(info.mapping).length + " columns matched</div>"
+          + '<div class="hint">Nothing to choose for this file.</div></div>';
+        box.appendChild(ok);
+      } else {
+        box.appendChild(rows);
+      }
+
+      host.appendChild(box);
+    });
+
+    el("intake").classList.add("hidden");
+    el("mapping").classList.remove("hidden");
+    mapReadiness();
+    window.scrollTo(0, 0);
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    clearProblem();
+    busy(true, "Reading the column headers…");
+
+    fetch("/api/inspect", { method: "POST", body: baseBody() })
+      .then(function (r) {
+        return r.json().then(function (d) { return { ok: r.ok, data: d }; });
+      })
+      .then(function (res) {
+        busy(false);
+        if (!res.ok) { showProblem(res.data); return; }
+
+        var sources = res.data.sources;
+        var everythingPlaced = SLOTS.every(function (s) {
+          return sources[s].ready && !(sources[s].unresolved || [])
+            .some(function (u) { return u.required; });
+        });
+        // nothing to ask: go straight through, same as before
+        if (everythingPlaced) { runReconcile(); return; }
+        renderMapping(sources);
+      })
+      .catch(function (err) {
+        busy(false);
+        showProblem({
+          title: "Could not reach the reconciler",
+          detail: String(err),
+          fix: "Is the server still running in your terminal?"
+        });
+      });
+  });
+
+  el("mapRun").addEventListener("click", function () {
+    if (mapReadiness() > 0) return;
+    el("mapping").classList.add("hidden");
+    el("intake").classList.remove("hidden");
+    runReconcile();
+  });
+
+  el("mapBack").addEventListener("click", function () {
+    el("mapping").classList.add("hidden");
+    el("intake").classList.remove("hidden");
+    window.scrollTo(0, 0);
   });
 
   el("sample").addEventListener("click", function () {
@@ -208,6 +388,7 @@
 
   el("again").addEventListener("click", function () {
     el("results").classList.add("hidden");
+    el("mapping").classList.add("hidden");
     el("intake").classList.remove("hidden");
     window.scrollTo(0, 0);
   });

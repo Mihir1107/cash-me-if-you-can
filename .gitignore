@@ -35,3 +35,7 @@ FORM_ANSWERS.md
 PROJECT_BRIEF.md
 
 CLAUDE.md
+
+# Test-run scratch
+.playwright-mcp/
+*.png

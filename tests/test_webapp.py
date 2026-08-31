@@ -198,6 +198,129 @@ def test_an_unknown_sample_lists_the_real_ones(client):
     assert "primary" in r.get_json()["fix"]
 
 
+# ------------------------------------------------ columns that are not ours
+
+def renamed(source_csv, headers, tmp_path, name):
+    """Rewrite a fixture's headers into what a real export would call them."""
+    import csv
+
+    rows = list(csv.DictReader(Path(source_csv).open()))
+    out = [{new: r[old] for old, new in headers.items()} for r in rows]
+    path = tmp_path / name
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(headers.values()))
+        w.writeheader()
+        w.writerows(out)
+    return path
+
+
+TALLY_LEDGER = {"ledger_id": "Voucher No", "order_id": "Order Ref",
+                "customer": "Party Name", "amount": "Amount (INR)",
+                "date": "Booking Date", "status": "Payment Status"}
+DASHBOARD_SETTLEMENTS = {
+    "settlement_id": "Settlement Id", "payment_id": "Payment Id",
+    "order_id": "Order Ref", "gross_amount": "Gross Amount", "fee": "Commission",
+    "tax": "GST", "refund_amount": "Refund", "settled_amount": "Net Settlement",
+    "settlement_date": "Settled On", "utr": "UTR Number"}
+BANK_EXPORT = {"txn_id": "Sr No", "date": "Value Date", "amount": "Amount",
+               "narration": "Particulars", "type": "Dr/Cr"}
+
+
+def real_world(tmp_path):
+    return {
+        "ledger": csv_file(renamed(DATA / "internal_ledger.csv", TALLY_LEDGER,
+                                   tmp_path, "ledger.csv")),
+        "settlements": csv_file(renamed(DATA / "razorpay_settlements.csv",
+                                        DASHBOARD_SETTLEMENTS, tmp_path,
+                                        "settlements.csv")),
+        "bank": csv_file(renamed(DATA / "bank_statement.csv", BANK_EXPORT,
+                                 tmp_path, "bank.csv")),
+        "use_llm": "0",
+    }
+
+
+def test_an_export_with_ordinary_real_world_headers_just_works(client, tmp_path):
+    """
+    Nobody's ledger has a column called `ledger_id`. If this tool only ran on
+    files that already used its own names, it only ran on its own fixture.
+    """
+    r = client.post("/api/reconcile", data=real_world(tmp_path),
+                    content_type="multipart/form-data")
+    assert r.status_code == 200
+    assert r.get_json()["report"]["total_orders"] == 57
+
+
+def test_renaming_the_columns_does_not_change_a_single_figure(client, tmp_path):
+    """The names are packaging. The numbers must not know they changed."""
+    canonical = client.post("/api/reconcile", data=three_good(),
+                            content_type="multipart/form-data").get_json()["report"]
+    theirs = client.post("/api/reconcile", data=real_world(tmp_path),
+                         content_type="multipart/form-data").get_json()["report"]
+
+    assert theirs["match_rate_pct"] == canonical["match_rate_pct"]
+    assert theirs["money"]["at_risk_value"] == canonical["money"]["at_risk_value"]
+    assert theirs["exception_reason_counts"] == canonical["exception_reason_counts"]
+
+
+def test_inspect_reports_what_it_could_and_could_not_place(client, tmp_path):
+    data = real_world(tmp_path)
+    data["ledger"] = csv_file(renamed(
+        DATA / "internal_ledger.csv",
+        {"ledger_id": "Rec Key", "order_id": "Ordr Refrence", "customer": "Buyer",
+         "amount": "Sale Val", "date": "Dt", "status": "State"},
+        tmp_path, "odd_ledger.csv"))
+
+    r = client.post("/api/inspect", data=data, content_type="multipart/form-data")
+    assert r.status_code == 200
+    ledger = r.get_json()["sources"]["ledger"]
+
+    assert not ledger["ready"]
+    unresolved = {u["field"]: u for u in ledger["unresolved"]}
+    # offered, and only offered
+    assert unresolved["order_id"]["suggestion"] == "Ordr Refrence"
+    assert "order_id" not in ledger["mapping"]
+    assert "Rec Key" in ledger["columns"]
+
+
+def test_a_confirmed_mapping_is_honoured(client, tmp_path):
+    """What the mapping screen sends back, once a human has chosen."""
+    data = real_world(tmp_path)
+    data["ledger"] = csv_file(renamed(
+        DATA / "internal_ledger.csv",
+        {"ledger_id": "Rec Key", "order_id": "Ordr Refrence", "customer": "Buyer",
+         "amount": "Sale Val", "date": "Dt", "status": "State"},
+        tmp_path, "odd_ledger2.csv"))
+    data["mapping_ledger"] = json.dumps({
+        "ledger_id": "Rec Key", "order_id": "Ordr Refrence", "amount": "Sale Val",
+        "date": "Dt", "status": "State", "customer": "Buyer",
+    })
+
+    r = client.post("/api/reconcile", data=data, content_type="multipart/form-data")
+    assert r.status_code == 200
+    assert r.get_json()["report"]["total_orders"] == 57
+
+
+def test_headers_nothing_recognises_are_refused_not_guessed(client, tmp_path):
+    """
+    The failure that matters. A column pointed at the wrong field is wrong in
+    every figure afterwards and nothing downstream would ever notice, so an
+    unplaceable file has to stop the run rather than proceed on a best guess.
+    """
+    data = real_world(tmp_path)
+    data["ledger"] = csv_file(renamed(
+        DATA / "internal_ledger.csv",
+        {"ledger_id": "aa", "order_id": "bb", "customer": "cc",
+         "amount": "dd", "date": "ee", "status": "ff"},
+        tmp_path, "opaque.csv"))
+
+    r = client.post("/api/reconcile", data=data, content_type="multipart/form-data")
+    assert r.status_code == 400
+    body = r.get_json()
+    assert body["slot"] == "ledger"
+    assert set(body["missing_columns"]) >= {"order_id", "amount"}
+    assert "aa" in body["found_columns"]      # says what the file actually has
+
+
 # ------------------------------------------------------- the holiday calendar
 
 def test_a_holiday_calendar_does_not_leak_into_the_next_run(client, tmp_path):
@@ -223,9 +346,9 @@ def test_a_holiday_calendar_actually_reaches_the_matcher(client, tmp_path,
     seen = {}
     real = webapp._run
 
-    def spy(data_dir, label, use_llm=True):
+    def spy(*args, **kwargs):
         seen["holidays"] = dict(matcher.BANK_HOLIDAYS)
-        return real(data_dir, label, use_llm)
+        return real(*args, **kwargs)
 
     monkeypatch.setattr(webapp, "_run", spy)
 

@@ -45,7 +45,9 @@ try:
 except ImportError:
     pass
 
-from src import matcher  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from src import matcher, schema  # noqa: E402
 from src.evaluate import run_evaluation  # noqa: E402
 from src.reconcile import SourceUnavailable, run_reconciliation  # noqa: E402
 
@@ -76,7 +78,8 @@ HUMAN = {
 }
 
 
-def _problem(status, title, detail, fix=None, slot=None, missing=None):
+def _problem(status, title, detail, fix=None, slot=None, missing=None,
+             columns=None):
     payload = {"title": title, "detail": detail}
     if fix:
         payload["fix"] = fix
@@ -84,28 +87,35 @@ def _problem(status, title, detail, fix=None, slot=None, missing=None):
         payload["slot"] = slot
     if missing:
         payload["missing_columns"] = missing
+    if columns:
+        payload["found_columns"] = columns
     return jsonify(payload), status
 
 
-def _explain_source_error(message):
+def _explain_source_error(error):
     """
-    Turn the pipeline's own SourceUnavailable text into something a finance
-    person can act on. The pipeline's message is precise and names a temp path,
-    which is precise and useless to the person reading it.
+    Turn a SourceUnavailable into something a finance person can act on.
+
+    The pipeline's own message names a temp path and a field set: precise, and
+    useless to the person holding the spreadsheet. The facts come off the
+    exception's attributes rather than out of its prose -- parsing the wording
+    back out was fragile and broke the first time the wording changed.
     """
-    slot = next((s for s in SLOTS if s in message), None)
-    missing = []
-    if "missing required columns" in message:
-        raw = message.split("missing required columns:", 1)[1].strip()
-        missing = [c.strip(" '\"[]") for c in raw.split(",") if c.strip(" '\"[]")]
+    slot = getattr(error, "source", None)
+    missing = getattr(error, "missing", None) or []
+    columns = getattr(error, "columns", None) or []
+
+    if missing:
         return _problem(
             400,
-            "A column is missing",
-            f"The file you gave as {HUMAN.get(slot, slot or 'a source')} does not "
-            f"have everything the reconciliation needs.",
-            fix="Re-export it with those columns included, or rename the existing "
-                "ones to match. Column names are case-sensitive.",
-            slot=slot, missing=missing,
+            "Some columns could not be matched",
+            f"The file you gave as {HUMAN.get(slot, slot or 'a source')} has "
+            f"columns this reconciliation could not place. Column names do not "
+            f"have to match exactly — spacing, case and common alternatives are "
+            f"handled — but these had no recognisable equivalent.",
+            fix="Pick the right column for each one on the next screen, or "
+                "re-export with clearer headers.",
+            slot=slot, missing=missing, columns=columns,
         )
     return _problem(
         400,
@@ -154,12 +164,13 @@ def _score_if_possible(data_dir):
     }
 
 
-def _run(data_dir, label, use_llm=True):
+def _run(data_dir, label, use_llm=True, mappings=None):
     """Run the real pipeline and package what the page needs."""
     out = Path(tempfile.mkdtemp())
     try:
         report, _ = run_reconciliation(
-            data_dir=str(data_dir), output_dir=str(out), enable_llm=use_llm)
+            data_dir=str(data_dir), output_dir=str(out), enable_llm=use_llm,
+            column_mappings=mappings)
         report["source_dir"] = label
         report.pop("exceptions", None)   # the page does not read it; it is large
 
@@ -181,6 +192,66 @@ def _run(data_dir, label, use_llm=True):
 @app.get("/")
 def index():
     return render_template("app.html")
+
+
+@app.post("/api/inspect")
+def inspect():
+    """
+    Read the headers of the three files and report what could be placed.
+
+    Called before reconciling so the page can put a mapping step in front of the
+    user when their column names are not ones the alias table knows -- which is
+    the normal case for a real export. Reads the header row only; no
+    reconciliation happens here.
+    """
+    missing = [s for s in SLOTS if s not in request.files or not request.files[s].filename]
+    if missing:
+        return _problem(
+            400, "Some files are missing",
+            "Reconciliation needs all three sources — one on its own cannot be "
+            "checked against anything.",
+            fix="Add: " + ", ".join(HUMAN[s] for s in missing) + ".",
+            slot=missing[0],
+        )
+
+    out = {}
+    for slot in SLOTS:
+        upload = request.files[slot]
+        try:
+            head = pd.read_csv(upload.stream, nrows=0)
+        except Exception:
+            return _problem(
+                400, "That file could not be read",
+                f"{HUMAN[slot].capitalize()} could not be parsed as CSV.",
+                fix="Check it is a plain CSV export rather than an .xlsx renamed "
+                    "to .csv, and that it has a header row.",
+                slot=slot,
+            )
+        finally:
+            upload.stream.seek(0)
+
+        found = schema.resolve(head.columns, slot)
+        found["filename"] = upload.filename
+        found["label"] = HUMAN[slot]
+        out[slot] = found
+
+    return jsonify({
+        "sources": out,
+        "ready": all(v["ready"] or v["split_amount"] for v in out.values()),
+    })
+
+
+def _mapping_from_request(slot):
+    """An explicit, human-confirmed mapping for one source, if the page sent one."""
+    raw = request.form.get(f"mapping_{slot}")
+    if not raw:
+        return None
+    try:
+        chosen = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    # blank means "not present"; only real column names travel onward
+    return {field: column for field, column in chosen.items() if column} or None
 
 
 @app.post("/api/reconcile")
@@ -208,6 +279,7 @@ def reconcile():
 
         use_llm = request.form.get("use_llm", "1") == "1"
         names = ", ".join(request.files[s].filename for s in SLOTS)
+        mappings = {slot: _mapping_from_request(slot) for slot in SLOTS}
 
         # A holiday calendar applies to this run only, and is put back after,
         # so one request cannot change how the next one counts a window.
@@ -215,12 +287,12 @@ def reconcile():
         try:
             if holiday_path:
                 matcher.BANK_HOLIDAYS = matcher.load_bank_holidays(str(holiday_path))
-            return jsonify(_run(work, names, use_llm=use_llm))
+            return jsonify(_run(work, names, use_llm=use_llm, mappings=mappings))
         finally:
             matcher.BANK_HOLIDAYS = previous
 
     except SourceUnavailable as e:
-        return _explain_source_error(str(e))
+        return _explain_source_error(e)
     except Exception:
         traceback.print_exc()
         return _problem(
@@ -246,7 +318,7 @@ def sample(name):
     try:
         return jsonify(_run(path, f"sample: {name}"))
     except SourceUnavailable as e:
-        return _explain_source_error(str(e))
+        return _explain_source_error(e)
 
 
 if __name__ == "__main__":
