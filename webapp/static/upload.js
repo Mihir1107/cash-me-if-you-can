@@ -98,12 +98,122 @@
     "Evaluating period close conditions & generating audit trail…"
   ];
 
+  /* The waiting scene. It animates the shape of the pipeline — three sources,
+   * one gate, an appended chain, a named exception — and nothing else. Every
+   * record chip is masked (ORD ····), so no number reaches the screen that a
+   * real run did not produce. */
+  var LANES = [
+    { x: 64,  cls: "rec-ledger", text: "ORD ····   ₹ ·····" },
+    { x: 240, cls: "rec-rzp",    text: "SETL ····  UTR ······" },
+    { x: 416, cls: "rec-bank",   text: "NEFT/UTR ······ CR" }
+  ];
+  var GATE_X = 240, GATE_Y = 186;
+  var CHAIN_MAX = 7, GUTTER_MAX = 4;
+  var scene = { on: false, timer: null, n: 0 };
+
+  function stillMotion() {
+    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function spawn(lane) {
+    if (!scene.on) return;
+    var chip = document.createElement("span");
+    chip.className = "rec " + lane.cls;
+    chip.style.left = lane.x + "px";
+    chip.style.setProperty("--dx", (GATE_X - lane.x) + "px");
+    chip.style.setProperty("--dy", (GATE_Y - 94) + "px");
+    chip.innerHTML = '<i></i>' + lane.text;
+    chip.addEventListener("animationend", function () { chip.remove(); });
+    el("stream").appendChild(chip);
+  }
+
+  function settle() {
+    if (!scene.on) return;
+    var gate = el("gate");
+    gate.classList.remove("hit");
+    void gate.offsetWidth;
+    gate.classList.add("hit");
+
+    /* one in five trios does not clear the gate — an exception is named, not dropped */
+    if (scene.n % 5 === 4) {
+      var stack = el("gutter");
+      var mark = document.createElement("span");
+      mark.className = "exc";
+      mark.textContent = "✕";
+      stack.appendChild(mark);
+      while (stack.children.length > GUTTER_MAX) stack.removeChild(stack.firstChild);
+      return;
+    }
+
+    var chain = el("chain");
+    var link = document.createElement("span");
+    link.className = "link";
+    link.innerHTML = '<span class="blk">✓</span>';
+    chain.appendChild(link);
+    var live = chain.querySelectorAll(".link:not(.leaving)");
+    if (live.length > CHAIN_MAX) {
+      var gone = live[0];
+      gone.classList.add("leaving");
+      gone.querySelector(".blk").classList.add("leaving");
+      setTimeout(function () { gone.remove(); }, 380);
+    }
+  }
+
+  function cycle() {
+    if (!scene.on) return;
+    LANES.forEach(function (lane, i) {
+      setTimeout(function () { spawn(lane); }, i * 110);
+    });
+    setTimeout(function () { settle(); scene.n += 1; }, 1320);
+  }
+
+  function startScene() {
+    var stream = el("stream");
+    if (!stream) return;
+    stopScene();
+    stream.innerHTML = "";
+    el("chain").innerHTML = "";
+    el("gutter").innerHTML = "";
+    scene.on = true;
+    scene.n = 0;
+    if (stillMotion()) {
+      /* the same picture, held still */
+      for (var i = 0; i < 4; i++) {
+        var link = document.createElement("span");
+        link.className = "link";
+        link.innerHTML = '<span class="blk">✓</span>';
+        el("chain").appendChild(link);
+      }
+      var mark = document.createElement("span");
+      mark.className = "exc";
+      mark.textContent = "✕";
+      el("gutter").appendChild(mark);
+      return;
+    }
+    cycle();
+    scene.timer = setInterval(cycle, 1150);
+  }
+
+  function stopScene() {
+    scene.on = false;
+    if (scene.timer) { clearInterval(scene.timer); scene.timer = null; }
+    var stream = el("stream");
+    if (stream) stream.innerHTML = "";
+  }
+
   function busy(on, text) {
     var working = el("working");
     working.classList.toggle("hidden", !on);
     if (progressTimer) {
       clearInterval(progressTimer);
       progressTimer = null;
+    }
+
+    /* the waiting scene is decoration: a fault in it must never stop a run */
+    try {
+      if (on) { startScene(); } else { stopScene(); }
+    } catch (err) {
+      if (window.console) console.error("reconcile scene:", err);
     }
 
     if (on) {

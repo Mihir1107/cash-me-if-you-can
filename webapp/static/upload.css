@@ -74,49 +74,168 @@
 .problem code { font-family: var(--f-mono); font-size: 12.5px; background: var(--surface); border: 1px solid var(--rule); padding: 1px 5px; border-radius: 2px; }
 .problem .fix { font-size: 13px; color: var(--ink-2); margin: 0; }
 
-/* Three source files converge into one reconciled close decision while the
-   server performs the unchanged reconciliation work. */
+/* The loading state is the product in miniature: masked records arrive from
+   three sources, pass one deterministic gate, and what survives is appended to
+   a hash-chained audit trail while what does not falls into exceptions. The
+   record chips are masked on purpose — no figure appears on this screen that a
+   real run did not produce. */
 .working {
-  display: flex; align-items: center; gap: 22px;
-  margin-top: 26px; padding: 18px 20px;
-  border: 1px solid var(--rule-2); background: var(--surface); box-shadow: var(--shadow);
+  position: fixed; inset: 0; z-index: 1000;
+  display: grid; place-items: center; align-content: center; gap: 26px;
+  margin: 0; padding: 32px; overflow: hidden;
+  border: 0; background: rgba(10,13,17,.66); box-shadow: none;
+  backdrop-filter: blur(16px) saturate(.8); -webkit-backdrop-filter: blur(16px) saturate(.8);
 }
-.reconcile-scene { position: relative; width: 244px; height: 78px; flex: 0 0 244px; }
+.working::before {
+  position: absolute; inset: 0; pointer-events: none; content: "";
+  background:
+    radial-gradient(circle at 50% 42%, rgba(123,164,232,.20), transparent 30rem),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 3px);
+}
+.working > * { position: relative; z-index: 1; }
+
+.reconcile-scene { position: relative; width: 480px; height: 300px; flex: none; }
+
+/* the three sources, held still: they are the fixed points, not the motion */
 .source-token {
-  position: absolute; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 4px;
-  color: var(--ink-3); font-family: var(--f-mono); font-size: 9.5px; line-height: 1;
+  position: absolute; top: 0; z-index: 2; width: 96px; margin-left: -48px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--ink-2); font-family: var(--f-mono); font-size: 10.5px;
+  letter-spacing: .05em; line-height: 1;
 }
+.token-ledger  { left: 64px; }
+.token-razorpay{ left: 240px; }
+.token-bank    { right: auto; left: 416px; }
 .token-icon {
-  display: grid; width: 30px; height: 34px; place-items: center;
-  border: 1px solid var(--rule-2); border-radius: 3px; background: var(--surface-2);
-  color: var(--accent); font-family: var(--f-mono); font-size: 15px; font-weight: 600;
-  box-shadow: 0 2px 5px rgba(21,24,27,.08);
+  display: grid; width: 52px; height: 58px; place-items: center;
+  border: 1px solid var(--rule-2); border-radius: 7px; background: var(--surface);
+  color: var(--accent); font-family: var(--f-mono); font-size: 26px; font-weight: 600;
+  box-shadow: 0 10px 26px rgba(0,0,0,.28);
 }
-.ledger-icon { font-size: 19px; line-height: .65; }
-.razorpay-icon { color: var(--warn); }
-.bank-icon { color: var(--ok); font-size: 16px; }
-.token-ledger { left: 5px; top: 22px; animation: ledger-merge 2.8s ease-in-out infinite; }
-.token-razorpay { left: 106px; top: 0; animation: razorpay-merge 2.8s ease-in-out infinite; }
-.token-bank { right: 5px; top: 22px; animation: bank-merge 2.8s ease-in-out infinite; }
-.data-path { position: absolute; z-index: 0; top: 39px; width: 92px; height: 1px; overflow: hidden; background: var(--rule-2); }
-.data-path::after { position: absolute; top: -1px; width: 20px; height: 3px; background: var(--accent); content: ""; animation: data-flow 1.1s ease-in-out infinite; }
-.path-left { left: 28px; transform: rotate(-11deg); transform-origin: right; }
-.path-right { right: 28px; transform: rotate(11deg); transform-origin: left; }
-.path-right::after { animation-delay: .28s; }
-.merge-core { position: absolute; z-index: 3; top: 23px; left: 104px; display: grid; width: 38px; height: 38px; place-items: center; }
-.core-mark { display: grid; position: relative; z-index: 2; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: var(--ok); color: var(--surface); font-family: var(--f-mono); font-size: 15px; font-weight: 600; box-shadow: 0 0 0 4px var(--ok-bg); animation: core-breathe 2.8s ease-in-out infinite; }
-.core-ring { position: absolute; border: 1px solid var(--ok); border-radius: 50%; opacity: 0; }
-.ring-one { inset: -2px; animation: core-pulse 2.8s ease-out infinite; }
-.ring-two { inset: -12px; animation: core-pulse 2.8s ease-out .34s infinite; }
-.working-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.working-copy strong { color: var(--ink); font-family: var(--f-serif); font-size: 16px; font-weight: 600; }
-.working-copy span { color: var(--ink-3); font-family: var(--f-mono); font-size: 12px; }
-@keyframes data-flow { 0% { transform: translateX(-25px); opacity: 0; } 28% { opacity: 1; } 72% { opacity: 1; } 100% { transform: translateX(105px); opacity: 0; } }
-@keyframes ledger-merge { 0%, 18%, 100% { transform: translate(0,0) scale(1); opacity: 1; } 48%, 57% { transform: translate(91px,2px) scale(.42); opacity: .35; } 66% { transform: translate(0,0) scale(1); opacity: 1; } }
-@keyframes razorpay-merge { 0%, 18%, 100% { transform: translate(0,0) scale(1); opacity: 1; } 48%, 57% { transform: translate(0,25px) scale(.42); opacity: .35; } 66% { transform: translate(0,0) scale(1); opacity: 1; } }
-@keyframes bank-merge { 0%, 18%, 100% { transform: translate(0,0) scale(1); opacity: 1; } 48%, 57% { transform: translate(-91px,2px) scale(.42); opacity: .35; } 66% { transform: translate(0,0) scale(1); opacity: 1; } }
-@keyframes core-breathe { 0%, 17%, 100% { transform: scale(1); } 48%, 57% { transform: scale(1.16); } 67% { transform: scale(1); } }
-@keyframes core-pulse { 0%, 35% { transform: scale(.7); opacity: 0; } 48% { opacity: .72; } 70%, 100% { transform: scale(1.5); opacity: 0; } }
+.ledger-icon { font-size: 30px; line-height: .65; }
+.bank-icon { color: var(--ok); font-size: 26px; }
+/* the Razorpay mark, drawn from the logo's own alpha so it sits in the box as a
+   single-colour glyph like the ledger and bank marks, in either theme */
+.rzp-mark {
+  display: block; width: 30px; height: 30px; background: #3395FF;
+  mask: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKMAAACjCAMAAADRsl6yAAAAM1BMVEVAAAAHJVQHJVUHJlMHJlQHJlUIJlQHJ1QHJ1UIJ1QzlP80lP8ylf8zlf80lf8zlv80lv+kX2KfAAAAAXRSTlMAQObYZgAAAhRJREFUeNrt29tuwjAQhOEUBtpSBvr+T1tVlSpxSHBs8P6JNpdw4U876wOOGIZ8ah+bL1wC0Xwh3Gi80cshmi/kGvlEm2608UbjjV4g0Xwhzmi80Uslmi8kGflEm2608UbjjV480XwhwGi80esgmi+MNRpvNJ54MN5o041eGdF8YYjReKPXSDRf2NtovNF4oo03Gm/0qonmCzsZjTd6/UTzha83lhjOA94YfqVXFCTcCLgaLZoN6CnDuGEuGjzW+F00dqzxUDIyNeoBb6yYV7FEonHeHWRE1JVLaE/jQDOWDcgyXnwpYtSXQm2BZbwiihf1tVC8qG+JNOMdoXaoqId7RFY73hX+G0+AqC8+2evGCGjHkSJK75SoR4WcdpwgQqKeEhKNY0SOURoznihGjRshRIlu1CQRYdS08RhPlB4Y48s4TtxAjNLDMkYbVWCMJUp4Yxkx0ijRjW8qNYYRHwujj+CfBcTgqKUZxpCrUWmWMaKMwhs1l9jfKNHLKNGNH7OIIfdlUk0ZexqlOiOZ2N2oamI3o+qN5z5GqcFIJvY0qo3Yw6hG4+vPZVKr8dVl3DYQO73HlNrLuAQjmZjGbMeMeq1RT5/LTq3EfbZjtmNG3c24yXZ8pvGY7Zir4+9zyDLmRtjT+JVRNxF32Y7PNB6yHbMd//6Zmz8T0og5gp+zjHkuy5UnN8LcCLMdc3Vkv02oc/0Ahohg8GFznigAAAAASUVORK5CYII=") center / contain no-repeat;
+  -webkit-mask: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKMAAACjCAMAAADRsl6yAAAAM1BMVEVAAAAHJVQHJVUHJlMHJlQHJlUIJlQHJ1QHJ1UIJ1QzlP80lP8ylf8zlf80lf8zlv80lv+kX2KfAAAAAXRSTlMAQObYZgAAAhRJREFUeNrt29tuwjAQhOEUBtpSBvr+T1tVlSpxSHBs8P6JNpdw4U876wOOGIZ8ah+bL1wC0Xwh3Gi80cshmi/kGvlEm2608UbjjV4g0Xwhzmi80Uslmi8kGflEm2608UbjjV480XwhwGi80esgmi+MNRpvNJ54MN5o041eGdF8YYjReKPXSDRf2NtovNF4oo03Gm/0qonmCzsZjTd6/UTzha83lhjOA94YfqVXFCTcCLgaLZoN6CnDuGEuGjzW+F00dqzxUDIyNeoBb6yYV7FEonHeHWRE1JVLaE/jQDOWDcgyXnwpYtSXQm2BZbwiihf1tVC8qG+JNOMdoXaoqId7RFY73hX+G0+AqC8+2evGCGjHkSJK75SoR4WcdpwgQqKeEhKNY0SOURoznihGjRshRIlu1CQRYdS08RhPlB4Y48s4TtxAjNLDMkYbVWCMJUp4Yxkx0ijRjW8qNYYRHwujj+CfBcTgqKUZxpCrUWmWMaKMwhs1l9jfKNHLKNGNH7OIIfdlUk0ZexqlOiOZ2N2oamI3o+qN5z5GqcFIJvY0qo3Yw6hG4+vPZVKr8dVl3DYQO73HlNrLuAQjmZjGbMeMeq1RT5/LTq3EfbZjtmNG3c24yXZ8pvGY7Zir4+9zyDLmRtjT+JVRNxF32Y7PNB6yHbMd//6Zmz8T0og5gp+zjHkuy5UnN8LcCLMdc3Vkv02oc/0Ahohg8GFznigAAAAASUVORK5CYII=") center / contain no-repeat;
+}
+
+/* the rails each source feeds down */
+.feed {
+  position: absolute; height: 1px; transform-origin: left center; opacity: .5;
+  background: linear-gradient(90deg, transparent, var(--rule-2) 16%, var(--rule-2) 84%, transparent);
+}
+.feed-l { left: 64px;  top: 84px; width: 203px; transform: rotate(30.1deg); }
+.feed-r { left: 416px; top: 84px; width: 203px; transform: rotate(149.9deg); }
+.feed-m { left: 240px; top: 84px; width: 102px; transform: rotate(90deg); }
+
+/* a record in flight: masked, so it asserts nothing */
+.rec {
+  position: absolute; top: 94px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px; border: 1px solid currentColor; border-radius: 3px;
+  background: var(--surface); font-family: var(--f-mono); font-size: 10px;
+  letter-spacing: .02em; white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(0,0,0,.3);
+  animation: converge 1.35s cubic-bezier(.5,.02,.4,1) forwards;
+}
+.rec i { display: block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.rec-ledger { color: var(--accent); }
+.rec-rzp    { color: var(--warn); }
+.rec-bank   { color: var(--ok); }
+@keyframes converge {
+  0%   { opacity: 0; transform: translate(-50%,-50%) scale(.92); }
+  14%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  76%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.55); }
+}
+
+/* the gate. Confidence buys nothing here; every record crosses the same bar. */
+.gate { position: absolute; left: 70px; top: 186px; width: 340px; height: 2px; background: var(--rule-2); }
+.gate::after {
+  position: absolute; inset: -3px -6px; content: ""; border-radius: 3px;
+  background: var(--accent); opacity: 0;
+}
+.gate.hit::after { animation: gate-hit .5s ease-out; }
+.gate-sweep {
+  position: absolute; top: -1px; left: 0; width: 86px; height: 4px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: gate-sweep 2.6s linear infinite;
+}
+.gate-label {
+  position: absolute; top: 10px; left: 0;
+  color: var(--ink-3); font-family: var(--f-mono); font-size: 9px;
+  letter-spacing: .16em; text-transform: uppercase;
+}
+@keyframes gate-sweep {
+  0% { transform: translateX(-90px); opacity: 0; }
+  12%, 88% { opacity: 1; }
+  100% { transform: translateX(342px); opacity: 0; }
+}
+@keyframes gate-hit { 0% { opacity: .30; } 100% { opacity: 0; } }
+
+/* what survives the gate is appended, hash-linked, never rewritten */
+.chain-rail { position: absolute; left: 70px; top: 232px; }
+.rail-label {
+  display: block; margin-bottom: 7px;
+  color: var(--ok); font-family: var(--f-mono); font-size: 9px;
+  letter-spacing: .16em; text-transform: uppercase; opacity: .85;
+}
+.chain {
+  display: flex; align-items: center; height: 24px;
+  mask: linear-gradient(90deg, transparent, #000 26px);
+  -webkit-mask: linear-gradient(90deg, transparent, #000 26px);
+}
+.link { display: flex; align-items: center; }
+.link::before { width: 11px; height: 1px; background: var(--ok); opacity: .5; content: ""; }
+.link:first-child::before { opacity: 0; }
+.blk {
+  display: grid; width: 22px; height: 22px; place-items: center;
+  border: 1px solid var(--ok); border-radius: 3px; background: var(--ok-bg);
+  color: var(--ok); font-family: var(--f-mono); font-size: 10px; line-height: 1;
+  animation: blk-in .42s cubic-bezier(.2,1.25,.4,1) both;
+}
+.blk.leaving { animation: blk-out .4s ease forwards; }
+.link.leaving::before { animation: blk-out .4s ease forwards; }
+@keyframes blk-in  { 0% { opacity: 0; transform: translateY(-16px) scale(.6); } 100% { opacity: 1; transform: none; } }
+@keyframes blk-out { 0% { opacity: 1; } 100% { opacity: 0; width: 0; margin-left: -11px; } }
+
+/* and what does not survive is not dropped, it is named */
+.gutter { position: absolute; right: 4px; top: 232px; width: 92px; text-align: center; }
+.gutter-label {
+  display: block; margin-bottom: 7px;
+  color: var(--stop); font-family: var(--f-mono); font-size: 9px;
+  letter-spacing: .16em; text-transform: uppercase; opacity: .85;
+}
+.gutter-stack { display: flex; gap: 5px; justify-content: center; min-height: 22px; }
+.exc {
+  display: grid; width: 20px; height: 20px; place-items: center;
+  border: 1px solid var(--stop); border-radius: 3px; background: var(--stop-bg);
+  color: var(--stop); font-family: var(--f-mono); font-size: 10px; line-height: 1;
+  animation: exc-in .55s cubic-bezier(.3,.9,.4,1) both;
+}
+@keyframes exc-in {
+  0%   { opacity: 0; transform: translate(-150px,-42px) scale(.8) rotate(-8deg); }
+  55%  { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}
+
+.working-copy { display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; }
+.working-copy strong { color: var(--ink); font-family: var(--f-serif); font-size: 23px; font-weight: 600; }
+.working-copy span { color: var(--ink-2); font-family: var(--f-mono); font-size: 12.5px; }
+
+@media (max-width: 560px) {
+  .working { padding: 24px; gap: 12px; }
+  .reconcile-scene { transform-origin: top center; transform: scale(.68); margin-bottom: -104px; }
+  .working-copy strong { font-size: 19px; }
+  .working-copy span { font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .working .rec, .working .gate-sweep, .working .blk, .working .exc { animation: none !important; }
+  .working .gate-sweep { opacity: .35; }
+}
 
 /* the results view, once a run exists */
 .result-head { display: flex; flex-wrap: wrap; gap: 14px 26px; align-items: flex-end; justify-content: space-between; }
@@ -127,81 +246,6 @@
 .hidden { display: none !important; }
 
 @media (max-width: 820px) { .drops { grid-template-columns: 1fr; } .drop { min-height: 0; } }
-@media (max-width: 560px) {
-  .working { align-items: flex-start; flex-direction: column; gap: 12px; }
-  .reconcile-scene { transform-origin: left top; transform: scale(.9); margin-bottom: -8px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .source-token, .data-path::after, .core-mark, .core-ring { animation: none !important; }
-  .ring-one { opacity: .25; transform: scale(1.15); }
-  .ring-two { display: none; }
-}
-
-/* Full-screen reconciliation moment. The underlying upload and sample-data
-   requests use the same loading state, so this never changes pipeline work. */
-.working {
-  position: fixed; inset: 0; z-index: 1000;
-  display: grid; place-items: center; gap: 0; margin: 0; padding: 32px;
-  overflow: hidden; border: 0; background: rgba(10, 13, 17, .62); box-shadow: none;
-  backdrop-filter: blur(15px) saturate(.78); -webkit-backdrop-filter: blur(15px) saturate(.78);
-}
-.working::before {
-  position: absolute; inset: 0; pointer-events: none; content: "";
-  background: radial-gradient(circle at center, rgba(123,164,232,.18), transparent 29rem);
-}
-.working > * { position: relative; z-index: 1; }
-.reconcile-scene { width: 372px; height: 222px; flex: none; }
-.source-token { gap: 8px; color: var(--ink-2); font-size: 11px; font-weight: 600; }
-.token-icon {
-  width: 56px; height: 62px; border-radius: 7px; background: var(--surface);
-  font-size: 27px; box-shadow: 0 10px 28px rgba(0,0,0,.24);
-}
-.ledger-icon { font-size: 32px; }
-.bank-icon { font-size: 27px; }
-.razorpay-icon { padding: 0; overflow: hidden; border-color: #7ba4e8; background: #fff; }
-.razorpay-icon img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.token-ledger { left: 7px; top: 108px; animation-name: fullscreen-ledger-merge; }
-.token-razorpay { left: 158px; top: 5px; animation-name: fullscreen-razorpay-merge; }
-.token-bank { right: 7px; top: 108px; animation-name: fullscreen-bank-merge; }
-.data-path { top: 132px; width: 143px; height: 1px; background: var(--rule-2); opacity: .7; }
-.data-path::after { width: 28px; height: 3px; background: var(--accent); }
-.path-left { left: 45px; transform: rotate(-13deg); transform-origin: right; }
-.path-right { right: 45px; transform: rotate(13deg); transform-origin: left; }
-.path-top { top: 72px; left: 186px; width: 1px; height: 73px; transform: none; }
-.path-top::after { width: 3px; height: 24px; animation-name: top-data-flow; }
-.merge-core { top: 107px; left: 165px; width: 48px; height: 48px; }
-.core-mark { width: 38px; height: 38px; font-size: 18px; box-shadow: 0 0 0 6px var(--ok-bg), 0 8px 22px rgba(0,0,0,.24); }
-.ring-one { inset: -6px; }
-.ring-two { inset: -23px; }
-.working-copy { align-items: center; text-align: center; margin-top: -11px; }
-.working-copy strong { color: var(--ink); font-size: 23px; }
-.working-copy span { color: var(--ink-2); font-size: 12.5px; }
-@keyframes fullscreen-ledger-merge {
-  0%, 18%, 100% { transform: translate(0,0) scale(1); opacity: 1; }
-  48%, 57% { transform: translate(158px,1px) scale(.30); opacity: .25; }
-  67% { transform: translate(0,0) scale(1); opacity: 1; }
-}
-@keyframes fullscreen-razorpay-merge {
-  0%, 18%, 100% { transform: translate(0,0) scale(1); opacity: 1; }
-  48%, 57% { transform: translate(2px,102px) scale(.30); opacity: .25; }
-  67% { transform: translate(0,0) scale(1); opacity: 1; }
-}
-@keyframes fullscreen-bank-merge {
-  0%, 18%, 100% { transform: translate(0,0) scale(1); opacity: 1; }
-  48%, 57% { transform: translate(-158px,1px) scale(.30); opacity: .25; }
-  67% { transform: translate(0,0) scale(1); opacity: 1; }
-}
-@keyframes top-data-flow { 0% { transform: translateY(-24px); opacity: 0; } 28% { opacity: 1; } 72% { opacity: 1; } 100% { transform: translateY(82px); opacity: 0; } }
-@media (max-width: 560px) {
-  .working { padding: 24px; }
-  .reconcile-scene { transform: scale(.82); margin-bottom: -19px; }
-  .working-copy strong { font-size: 20px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .working .source-token, .working .data-path::after, .working .core-mark, .working .core-ring { animation: none !important; }
-  .working .ring-one { opacity: .25; transform: scale(1.15); }
-  .working .ring-two { display: none; }
-}
 
 /* ------------------------------------------------------- the mapping step */
 /* Shown when the alias table could not place a column. Never skipped with a

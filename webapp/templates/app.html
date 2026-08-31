@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
-<link rel="stylesheet" href="{{ url_for('static', filename='desk.css', v='original-ui') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='upload.css', v='original-ui') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='desk.css', v='close-scene-2') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='upload.css', v='close-scene-2') }}">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧾</text></svg>">
 </head>
 <body>
@@ -96,17 +96,30 @@
   <div class="problem hidden" id="problem"></div>
 
   <div class="working hidden" id="working" role="status" aria-live="polite">
-    <div class="reconcile-scene" aria-hidden="true">
-      <span class="data-path path-left"></span>
-      <span class="data-path path-right"></span>
-      <span class="data-path path-top"></span>
+    <div class="reconcile-scene" id="scene" aria-hidden="true">
       <div class="source-token token-ledger"><span class="token-icon ledger-icon">≡</span><span>Ledger</span></div>
-      <div class="source-token token-razorpay"><span class="token-icon razorpay-icon"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKMAAACjCAMAAADRsl6yAAAAM1BMVEVAAAAHJVQHJVUHJlMHJlQHJlUIJlQHJ1QHJ1UIJ1QzlP80lP8ylf8zlf80lf8zlv80lv+kX2KfAAAAAXRSTlMAQObYZgAAAhRJREFUeNrt29tuwjAQhOEUBtpSBvr+T1tVlSpxSHBs8P6JNpdw4U876wOOGIZ8ah+bL1wC0Xwh3Gi80cshmi/kGvlEm2608UbjjV4g0Xwhzmi80Uslmi8kGflEm2608UbjjV480XwhwGi80esgmi+MNRpvNJ54MN5o041eGdF8YYjReKPXSDRf2NtovNF4oo03Gm/0qonmCzsZjTd6/UTzha83lhjOA94YfqVXFCTcCLgaLZoN6CnDuGEuGjzW+F00dqzxUDIyNeoBb6yYV7FEonHeHWRE1JVLaE/jQDOWDcgyXnwpYtSXQm2BZbwiihf1tVC8qG+JNOMdoXaoqId7RFY73hX+G0+AqC8+2evGCGjHkSJK75SoR4WcdpwgQqKeEhKNY0SOURoznihGjRshRIlu1CQRYdS08RhPlB4Y48s4TtxAjNLDMkYbVWCMJUp4Yxkx0ijRjW8qNYYRHwujj+CfBcTgqKUZxpCrUWmWMaKMwhs1l9jfKNHLKNGNH7OIIfdlUk0ZexqlOiOZ2N2oamI3o+qN5z5GqcFIJvY0qo3Yw6hG4+vPZVKr8dVl3DYQO73HlNrLuAQjmZjGbMeMeq1RT5/LTq3EfbZjtmNG3c24yXZ8pvGY7Zir4+9zyDLmRtjT+JVRNxF32Y7PNB6yHbMd//6Zmz8T0og5gp+zjHkuy5UnN8LcCLMdc3Vkv02oc/0Ahohg8GFznigAAAAASUVORK5CYII=" alt=""></span><span>Razorpay</span></div>
+      <div class="source-token token-razorpay"><span class="token-icon razorpay-icon"><span class="rzp-mark"></span></span><span>Razorpay</span></div>
       <div class="source-token token-bank"><span class="token-icon bank-icon">⌂</span><span>Bank</span></div>
-      <div class="merge-core">
-        <span class="core-ring ring-one"></span>
-        <span class="core-ring ring-two"></span>
-        <span class="core-mark">✓</span>
+
+      <span class="feed feed-l"></span>
+      <span class="feed feed-m"></span>
+      <span class="feed feed-r"></span>
+
+      <div class="stream" id="stream"></div>
+
+      <div class="gate" id="gate">
+        <span class="gate-sweep"></span>
+        <span class="gate-label">deterministic match gate</span>
+      </div>
+
+      <div class="chain-rail">
+        <span class="rail-label">audit chain</span>
+        <div class="chain" id="chain"></div>
+      </div>
+
+      <div class="gutter">
+        <span class="gutter-label">exceptions</span>
+        <span class="gutter-stack" id="gutter"></span>
       </div>
     </div>
     <div class="working-copy">
@@ -153,7 +166,7 @@
   {% include "_desk.html" %}
 </div>
 
-<script src="{{ url_for('static', filename='desk.js') }}"></script>
-<script src="{{ url_for('static', filename='upload.js') }}"></script>
+<script src="{{ url_for('static', filename='desk.js', v='close-scene-2') }}"></script>
+<script src="{{ url_for('static', filename='upload.js', v='close-scene-2') }}"></script>
 </body>
 </html>
