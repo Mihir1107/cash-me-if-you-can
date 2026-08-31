@@ -289,6 +289,8 @@ PARSE_RATE = 0.90       # of non-blank values
 UNIQUE_RATE = 0.95
 FOOTING_RATE = 0.60     # settlements genuinely mis-foot; most should not
 FEE_RATIO_MAX = 0.25    # a fee column that is a quarter of gross is not a fee
+BALANCE_RATIO_MAX = 10  # measured: ~2 for amount columns, ~70 for a balance
+CATEGORICAL_RATIO_MAX = 0.3   # a status repeats itself; a name does not
 
 
 def _numeric(series):
@@ -390,6 +392,101 @@ def verify_mapping(df, mapping, source):
             checks.append(_check(
                 "the fee column is fee-sized", ratio <= FEE_RATIO_MAX,
                 f"median fee is {ratio:.0%} of median gross"))
+
+    # A status column is a small vocabulary -- paid, refunded, captured -- and a
+    # name column is not. Pointing `status` at a customer name passes every other
+    # check here (both are populated strings) and then quietly breaks refund
+    # detection, because no customer is ever spelled "refunded".
+    if "status" in frame.columns:
+        ratio = frame["status"].nunique(dropna=True) / rows
+        checks.append(_check(
+            "status is a small set of values, not free text",
+            ratio <= CATEGORICAL_RATIO_MAX,
+            f"{ratio:.0%} of values are distinct — a status column repeats "
+            f"itself, a name column does not"))
+
+    # A bank statement's most likely mis-map, and one nothing above can see: a
+    # running balance column is numeric, well populated and perfectly plausible.
+    # It is separable from a transaction amount by scale rather than by type --
+    # a balance is large and moves in small steps, an amount IS the step. The
+    # ratio is ~2 for real amount columns and ~70 for a balance, so the line sits
+    # far from both.
+    if source == "bank" and "amount" in frame.columns:
+        values = _numeric(frame["amount"]).dropna()
+        steps = values.diff().abs().dropna()
+        if len(steps) > 3 and steps.median():
+            ratio = abs(values.median()) / steps.median()
+            checks.append(_check(
+                "the amount column holds amounts, not a running balance",
+                ratio <= BALANCE_RATIO_MAX,
+                f"values are {ratio:.0f}x their own step size "
+                f"(a transaction amount is ~2x, a running balance far more)"))
+
+    failures = [c["check"] + ": " + c["detail"] for c in checks if not c["ok"]]
+    return {"ok": not failures, "checks": checks, "failures": failures}
+
+
+# ---------------------------------------------------------------------------
+# Cross-source verification.
+# ---------------------------------------------------------------------------
+#
+# Everything above checks one file against itself, and that is only as strong as
+# the file's own internal arithmetic. Settlements have a real identity to test --
+# gross minus fee minus tax has to equal settled -- so a swap there is caught
+# cold. The ledger and the bank statement have no such identity, and it shows:
+# `narration` pointed at a branch-name column and `order_id` swapped with
+# `ledger_id` both pass every single-file check there is.
+#
+# But these three files are three views of the SAME money, and that is itself a
+# testable claim. If the ledger and the settlement report share no order ids,
+# one of those columns is not the order id. If no bank narration contains any
+# reference the settlements carry, `narration` is probably not the narration.
+# Nothing else in the pipeline gets to assume the three files relate -- this is
+# where that assumption is checked.
+
+ORDER_OVERLAP_MIN = 0.10    # catastrophic mis-map gives ~0; bad data still gives more
+NARRATION_HIT_MIN = 0.05    # a statement can legitimately quote no references
+
+
+def verify_sources(ledger, settlements, bank=None):
+    """
+    Do these three files describe the same money?
+
+    Returns {"ok", "checks", "failures"} in the same shape as verify_mapping.
+    Thresholds are set low on purpose: they exist to catch a column pointed at
+    the wrong thing, not to grade the merchant's bookkeeping. A genuinely messy
+    month still clears them; a mis-mapped join key does not.
+    """
+    checks = []
+
+    if ledger is not None and settlements is not None \
+            and "order_id" in ledger and "order_id" in settlements:
+        left = set(ledger["order_id"].dropna().astype(str))
+        right = set(settlements["order_id"].dropna().astype(str))
+        if left and right:
+            overlap = len(left & right) / min(len(left), len(right))
+            checks.append(_check(
+                "the ledger and the settlement report share order ids",
+                overlap >= ORDER_OVERLAP_MIN,
+                f"{overlap:.0%} of the smaller side's order ids appear on both "
+                f"— near zero usually means one of them is not the order id"))
+
+    if bank is not None and settlements is not None \
+            and "narration" in bank and "utr" in settlements:
+        refs = {normalise(u) for u in settlements["utr"].dropna().astype(str)}
+        refs = {r for r in refs if len(r) >= 5}
+        text = [normalise(t) for t in bank["narration"].dropna().astype(str)]
+        text = [t for t in text if t]
+        # A batch with no references to look for, or no narrations to look in,
+        # has nothing to say either way. Silence is not a failing grade.
+        if refs and text:
+            hits = sum(any(r in t for r in refs) for t in text) / len(text)
+            checks.append(_check(
+                "bank narrations quote references the settlements carry",
+                hits >= NARRATION_HIT_MIN,
+                f"{hits:.0%} of narrations contain a known reference — zero can "
+                f"mean the column is not the narration, or that this bank simply "
+                f"does not quote them"))
 
     failures = [c["check"] + ": " + c["detail"] for c in checks if not c["ok"]]
     return {"ok": not failures, "checks": checks, "failures": failures}

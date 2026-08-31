@@ -222,3 +222,91 @@ def test_one_column_cannot_be_claimed_by_two_fields(monkeypatch):
 
     out = schema_llm.propose_mapping(["Total", "When"], "ledger")
     assert list(out["mapping"].values()).count("Total") == 1
+
+
+# ------------------------------- the checks a single file cannot make alone
+
+def opaque_all_three(tmp_path):
+    """All three files under headers no table could place."""
+    import shutil
+
+    for src, dst, cols in [
+        ("internal_ledger.csv", "internal_ledger.csv",
+         {"ledger_id": "f1", "order_id": "f2", "customer": "f3",
+          "amount": "f4", "date": "f5", "status": "f6"}),
+        ("razorpay_settlements.csv", "razorpay_settlements.csv", OPAQUE),
+        ("bank_statement.csv", "bank_statement.csv",
+         {"txn_id": "g1", "date": "g2", "amount": "g3", "narration": "g4",
+          "type": "g5"}),
+    ]:
+        rows = list(csv.DictReader((DATA / src).open()))
+        with (tmp_path / dst).open("w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(cols.values()))
+            w.writeheader()
+            w.writerows([{n: r[o] for o, n in cols.items()} for r in rows])
+    return tmp_path
+
+
+def test_a_proposal_that_breaks_the_join_is_refused_at_the_pipeline_level(
+        monkeypatch, tmp_path):
+    """
+    The gap single-file verification cannot close. Proposing the ledger's own
+    row id as the order id passes every check inside that file -- it is a
+    populated, unique string column. It only falls apart against the settlement
+    report, where the two then share no orders at all.
+    """
+    import os
+
+    from src.reconcile import run_reconciliation
+
+    d = opaque_all_three(tmp_path)
+    os.environ.pop("OPENAI_API_KEY", None)
+
+    def fake(columns, source, filename="x"):
+        if source == "ledger":
+            return {"mapping": {"ledger_id": "f2", "order_id": "f1",
+                                "amount": "f4", "date": "f5", "customer": "f3",
+                                "status": "f6"},
+                    "llm_invoked": True, "note": None}
+        if source == "settlements":
+            return {"mapping": dict(OPAQUE), "llm_invoked": True, "note": None}
+        return {"mapping": {"txn_id": "g1", "date": "g2", "amount": "g3",
+                            "narration": "g4", "type": "g5"},
+                "llm_invoked": True, "note": None}
+
+    monkeypatch.setattr(schema_llm, "propose_mapping", fake)
+
+    with pytest.raises(SourceUnavailable) as caught:
+        run_reconciliation(data_dir=str(d), output_dir=str(tmp_path / "out"),
+                           allow_llm_schema=True)
+    assert "same money" in str(caught.value)
+
+
+def test_a_correct_proposal_for_all_three_runs_end_to_end(monkeypatch, tmp_path):
+    import os
+    import shutil
+
+    from src.reconcile import run_reconciliation
+
+    d = opaque_all_three(tmp_path)
+    (tmp_path / "out").mkdir(exist_ok=True)
+    os.environ.pop("OPENAI_API_KEY", None)
+
+    right = {
+        "ledger": {"ledger_id": "f1", "order_id": "f2", "customer": "f3",
+                   "amount": "f4", "date": "f5", "status": "f6"},
+        "settlements": dict(OPAQUE),
+        "bank": {"txn_id": "g1", "date": "g2", "amount": "g3",
+                 "narration": "g4", "type": "g5"},
+    }
+    monkeypatch.setattr(schema_llm, "propose_mapping",
+                        lambda columns, source, filename="x": {
+                            "mapping": right[source], "llm_invoked": True,
+                            "note": None})
+
+    report, _ = run_reconciliation(data_dir=str(d),
+                                   output_dir=str(tmp_path / "out"),
+                                   allow_llm_schema=True)
+    assert report["total_orders"] == 57
+    assert report["money"]["identity"]["holds"]
+    assert report["source_diagnostics"]["ok"]

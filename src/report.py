@@ -18,7 +18,7 @@ from src.triage import build_triage_report, print_triage
 
 def build_report(total_orders, stage_a_results, stage_b_results,
                  fuzzy_links, llm_links, llm_exceptions, bank_error=None,
-                 throughput=None, exposure_index=None):
+                 throughput=None, exposure_index=None, source_diagnostics=None):
     matched_a = {r.order_id for r in stage_a_results if r.status == "matched"}
     exceptions_a = [r for r in stage_a_results if r.status == "exception"]
 
@@ -103,6 +103,10 @@ def build_report(total_orders, stage_a_results, stage_b_results,
         "triage": triage or {},
         "throughput": throughput or {},
         "bank_source_error": bank_error,
+        # Whether the three files actually describe the same money. Reported
+        # whoever chose the columns -- a person who mapped them by hand still
+        # wants to know if the ledger and the settlements share no order ids.
+        "source_diagnostics": source_diagnostics or {},
         "exception_count": len(exception_list),
         "exception_reason_counts": reason_counts,
         "exceptions": exception_list,

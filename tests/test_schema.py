@@ -249,3 +249,151 @@ def test_applying_a_mapping_renames_and_drops_the_rest():
     assert set(out.columns) == {"order_id", "amount", "ledger_id", "date"}
     assert out["amount"].iloc[0] == 100.0
     assert "Notes" not in out.columns
+
+
+# ------------------------------------------- what one file cannot check alone
+
+def bank_with_balance():
+    """A statement shaped like a real one: running balance, branch, two dates."""
+    import pandas as pd
+    from pathlib import Path as P
+
+    bank = pd.read_csv(P(__file__).resolve().parent.parent / "data" / "bank_statement.csv")
+    balance, running = [], 500_000.0
+    for _, row in bank.iterrows():
+        running += row["amount"] if row["type"] == "credit" else -row["amount"]
+        balance.append(round(running, 2))
+    return pd.DataFrame({
+        "Sr No": bank["txn_id"], "Value Date": bank["date"],
+        "Particulars": bank["narration"], "Branch": ["MUMBAI FORT"] * len(bank),
+        "Amount": bank["amount"], "Balance": balance, "Dr/Cr": bank["type"],
+    })
+
+
+GOOD_BANK = {"txn_id": "Sr No", "date": "Value Date", "amount": "Amount",
+             "narration": "Particulars", "type": "Dr/Cr"}
+
+
+def test_a_running_balance_is_not_mistaken_for_an_amount():
+    """
+    A bank statement's likeliest mis-map, and the one nothing else here sees.
+    A balance column is numeric, fully populated and entirely plausible. What
+    separates it from a transaction amount is scale, not type: a balance is
+    large and moves in small steps, an amount IS the step.
+    """
+    from src.schema import verify_mapping
+
+    df = bank_with_balance()
+    assert verify_mapping(df, GOOD_BANK, "bank")["ok"]
+
+    wrong = dict(GOOD_BANK, amount="Balance")
+    verdict = verify_mapping(df, wrong, "bank")
+    assert not verdict["ok"]
+    assert any("running balance" in f for f in verdict["failures"])
+
+
+def test_a_single_file_cannot_tell_narration_from_any_other_text():
+    """
+    Stated as a test because it is a real limit, not an oversight. Both columns
+    are strings and both are populated; nothing inside one file separates them.
+    This is exactly why verify_sources exists.
+    """
+    from src.schema import verify_mapping
+
+    wrong = dict(GOOD_BANK, narration="Branch")
+    assert verify_mapping(bank_with_balance(), wrong, "bank")["ok"]
+
+
+# --------------------------------------------------- three views of one money
+
+def sources():
+    import pandas as pd
+    from pathlib import Path as P
+
+    d = P(__file__).resolve().parent.parent / "data"
+    return (pd.read_csv(d / "internal_ledger.csv"),
+            pd.read_csv(d / "razorpay_settlements.csv"),
+            pd.read_csv(d / "bank_statement.csv"))
+
+
+def test_files_that_describe_the_same_money_verify():
+    from src.schema import verify_sources
+
+    ledger, settlements, bank = sources()
+    verdict = verify_sources(ledger, settlements, bank)
+    assert verdict["ok"], verdict["failures"]
+
+
+def test_a_swapped_join_key_is_caught_across_sources():
+    """
+    `order_id` and `ledger_id` swapped passes every single-file check there is
+    -- both are strings, both are unique, both are populated. What gives it away
+    is that the ledger and the settlement report then share no orders at all.
+    """
+    from src.schema import verify_sources
+
+    ledger, settlements, bank = sources()
+    swapped = ledger.rename(columns={"order_id": "ledger_id",
+                                     "ledger_id": "order_id"})
+    verdict = verify_sources(swapped, settlements, bank)
+    assert not verdict["ok"]
+    assert any("share order ids" in f for f in verdict["failures"])
+
+
+def test_a_narration_pointed_at_the_wrong_text_column_is_caught_across_sources():
+    from src.schema import verify_sources
+
+    ledger, settlements, bank = sources()
+    bank = bank.copy()
+    bank["narration"] = "MUMBAI FORT BRANCH"
+    verdict = verify_sources(ledger, settlements, bank)
+    assert not verdict["ok"]
+    assert any("quote references" in f for f in verdict["failures"])
+
+
+def test_the_thresholds_do_not_grade_the_merchant_s_bookkeeping():
+    """
+    These exist to catch a column pointed at the wrong thing, not messy books.
+    A batch where most orders are unsettled still describes the same money.
+    """
+    from src.schema import verify_sources
+
+    ledger, settlements, bank = sources()
+    assert verify_sources(ledger.head(20), settlements, bank)["ok"]
+    assert verify_sources(ledger, settlements.head(10), bank)["ok"]
+
+
+def test_nothing_to_compare_is_not_a_failure():
+    """A batch with no references to find has nothing to say, not a verdict."""
+    import pandas as pd
+
+    from src.schema import verify_sources
+
+    ledger, settlements, bank = sources()
+    quiet = bank.copy()
+    quiet["narration"] = ""
+    verdict = verify_sources(ledger, settlements, quiet)
+    assert not any("quote references" in c["check"] for c in verdict["checks"])
+
+
+def test_a_status_column_is_not_confused_with_a_name():
+    """
+    Both are populated strings, so type tells you nothing. What separates them
+    is that a status repeats — paid, refunded, captured — and a name does not.
+    Getting this wrong breaks refund detection silently, because no customer is
+    ever spelled "refunded".
+    """
+    import pandas as pd
+    from pathlib import Path as P
+
+    from src.schema import verify_mapping
+
+    ledger = pd.read_csv(P(__file__).resolve().parent.parent
+                         / "data" / "internal_ledger.csv")
+    good = {f: f for f in ("ledger_id", "order_id", "amount", "date",
+                           "customer", "status")}
+    assert verify_mapping(ledger, good, "ledger")["ok"]
+
+    verdict = verify_mapping(ledger, dict(good, status="customer"), "ledger")
+    assert not verdict["ok"]
+    assert any("small set of values" in f for f in verdict["failures"])

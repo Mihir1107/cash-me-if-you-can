@@ -166,7 +166,16 @@ def load_source(path, name, mapping=None, allow_llm=False):
             f"{name} at {path} is missing required columns: {sorted(missing)}",
             source=name, missing=sorted(missing), columns=list(df.columns),
         )
-    return schema.apply_mapping(df, resolved)
+
+    out = schema.apply_mapping(df, resolved)
+    # How the columns were decided travels with the frame, because the
+    # cross-source check downstream treats a model's guess and a person's
+    # confirmed choice differently -- and it should.
+    out.attrs["schema_decided_by"] = (
+        "explicit" if mapping else
+        "model" if found.get("llm_filled") else
+        "table")
+    return out
 
 
 def _degrade_stage_b(settlements, reason):
@@ -262,6 +271,19 @@ def run_reconciliation(data_dir="data", output_dir="output",
                     column_mappings.get("settlements"), allow_llm_schema),
     ))
 
+    # Three views of the same money, so that they relate is itself checkable --
+    # and it is the only check with any teeth on the ledger and bank sides,
+    # neither of which has an internal identity the way settlements do.
+    source_check = schema.verify_sources(ledger, settlements)
+    inferred = [f for f in (ledger, settlements)
+                if f.attrs.get("schema_decided_by") == "model"]
+    if inferred and not source_check["ok"]:
+        raise SourceUnavailable(
+            "the columns proposed for these files do not describe the same "
+            "money: " + "; ".join(source_check["failures"]),
+            source="ledger", columns=list(ledger.columns),
+        )
+
     # --- Stage A: ledger <-> settlement (deterministic) ---
     stage_a_results, _ = stage(
         "stage_a_ledger_settlement",
@@ -277,6 +299,14 @@ def run_reconciliation(data_dir="data", output_dir="output",
     try:
         bank = load_source(f"{data_dir}/bank_statement.csv", "bank",
                            column_mappings.get("bank"), allow_llm_schema)
+        bank_check = schema.verify_sources(ledger, settlements, bank)
+        if bank.attrs.get("schema_decided_by") == "model" and not bank_check["ok"]:
+            raise SourceUnavailable(
+                "the columns proposed for the bank statement do not line up "
+                "with the settlements: " + "; ".join(bank_check["failures"]),
+                source="bank", columns=list(bank.columns),
+            )
+        source_check = bank_check
     except SourceUnavailable as e:
         bank_error = str(e)
 
@@ -357,6 +387,7 @@ def run_reconciliation(data_dir="data", output_dir="output",
         llm_links=llm_links,
         llm_exceptions=llm_exceptions,
         bank_error=bank_error,
+        source_diagnostics=source_check,
         exposure_index=build_exposure_index(ledger, settlements),
         throughput=_throughput(order_count, bank, timings, t_start,
                                llm_calls=sum(1 for r in llm_links + llm_exceptions
