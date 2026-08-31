@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reconciliation Close Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', filename='desk.css', v='original-ui') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='upload.css', v='original-ui') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧾</text></svg>">
+</head>
+<body>
+
+<!-- ------------------------------------------------------------ intake -->
+<div class="intake" id="intake">
+  <header class="intake-head">
+    <div class="eyebrow">Three-way reconciliation</div>
+    <h1>Reconciliation Close Desk</h1>
+    <p>Drop in your ledger, your Razorpay settlement report and your bank statement.
+       You get back what matched, what didn't and why, how much money is at risk under
+       each reason, who has to fix it, and whether the period can be closed.</p>
+    <div class="local-note">
+      <b>Stays on this machine</b>
+      <span>Files are read, reconciled and discarded. Nothing is uploaded anywhere.</span>
+    </div>
+  </header>
+
+  <form id="form">
+    <div class="drops">
+      <label class="drop" data-slot="ledger">
+        <span class="n">1</span>
+        <h3>Your ledger</h3>
+        <span class="what">What you booked as a sale. Exported from your own accounting system.</span>
+        <span class="cols">needs: ledger_id · order_id · amount · date</span>
+        <input type="file" name="ledger" accept=".csv,text/csv" required>
+      </label>
+
+      <label class="drop" data-slot="settlements">
+        <span class="n">2</span>
+        <h3>Razorpay settlements</h3>
+        <span class="what">What the gateway says it paid out. The settlement report from your dashboard.</span>
+        <span class="cols">needs: settlement_id · order_id · gross_amount · fee · tax · settled_amount · settlement_date · utr</span>
+        <input type="file" name="settlements" accept=".csv,text/csv" required>
+      </label>
+
+      <label class="drop" data-slot="bank">
+        <span class="n">3</span>
+        <h3>Bank statement</h3>
+        <span class="what">What actually moved. The CSV export from your bank, narration column and all.</span>
+        <span class="cols">needs: txn_id · date · amount · narration</span>
+        <input type="file" name="bank" accept=".csv,text/csv" required>
+      </label>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="run" type="submit" disabled>Reconcile</button>
+      <span class="sep">|</span>
+      <button class="btn ghost" id="sample" type="button">Try it with sample data</button>
+      <span class="aside" id="readiness">Add all three files to run.</span>
+    </div>
+
+    <details class="opts">
+      <summary>Options</summary>
+      <div class="body">
+        <div class="opt-row">
+          <label for="holidays">Bank holiday calendar (CSV: <code>date,name</code>)</label>
+          <input type="file" id="holidays" name="holidays" accept=".csv,text/csv">
+          <span class="why">The settlement window counts bank working days — Sundays and the second and
+            fourth Saturday are already excluded. Public holidays are not, because a wrong holiday date
+            silently changes whether a real payout reads as late. Supply the RBI calendar for your period
+            and they will be counted.</span>
+        </div>
+        <div class="opt-row">
+          <label><input type="checkbox" id="useLlm" checked> Use the language model to read mangled bank narrations</label>
+          <span class="why">Off, or with no API key configured, the pipeline degrades honestly: those rows
+            become reported exceptions rather than guesses. It never changes whether something counts as
+            matched — that is always decided by deterministic code.</span>
+        </div>
+      </div>
+    </details>
+  </form>
+
+  <div class="problem hidden" id="problem"></div>
+
+  <div class="working hidden" id="working" role="status" aria-live="polite">
+    <div class="reconcile-scene" aria-hidden="true">
+      <span class="data-path path-left"></span>
+      <span class="data-path path-right"></span>
+      <span class="data-path path-top"></span>
+      <div class="source-token token-ledger"><span class="token-icon ledger-icon">≡</span><span>Ledger</span></div>
+      <div class="source-token token-razorpay"><span class="token-icon razorpay-icon"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKMAAACjCAMAAADRsl6yAAAAM1BMVEVAAAAHJVQHJVUHJlMHJlQHJlUIJlQHJ1QHJ1UIJ1QzlP80lP8ylf8zlf80lf8zlv80lv+kX2KfAAAAAXRSTlMAQObYZgAAAhRJREFUeNrt29tuwjAQhOEUBtpSBvr+T1tVlSpxSHBs8P6JNpdw4U876wOOGIZ8ah+bL1wC0Xwh3Gi80cshmi/kGvlEm2608UbjjV4g0Xwhzmi80Uslmi8kGflEm2608UbjjV480XwhwGi80esgmi+MNRpvNJ54MN5o041eGdF8YYjReKPXSDRf2NtovNF4oo03Gm/0qonmCzsZjTd6/UTzha83lhjOA94YfqVXFCTcCLgaLZoN6CnDuGEuGjzW+F00dqzxUDIyNeoBb6yYV7FEonHeHWRE1JVLaE/jQDOWDcgyXnwpYtSXQm2BZbwiihf1tVC8qG+JNOMdoXaoqId7RFY73hX+G0+AqC8+2evGCGjHkSJK75SoR4WcdpwgQqKeEhKNY0SOURoznihGjRshRIlu1CQRYdS08RhPlB4Y48s4TtxAjNLDMkYbVWCMJUp4Yxkx0ijRjW8qNYYRHwujj+CfBcTgqKUZxpCrUWmWMaKMwhs1l9jfKNHLKNGNH7OIIfdlUk0ZexqlOiOZ2N2oamI3o+qN5z5GqcFIJvY0qo3Yw6hG4+vPZVKr8dVl3DYQO73HlNrLuAQjmZjGbMeMeq1RT5/LTq3EfbZjtmNG3c24yXZ8pvGY7Zir4+9zyDLmRtjT+JVRNxF32Y7PNB6yHbMd//6Zmz8T0og5gp+zjHkuy5UnN8LcCLMdc3Vkv02oc/0Ahohg8GFznigAAAAASUVORK5CYII=" alt=""></span><span>Razorpay</span></div>
+      <div class="source-token token-bank"><span class="token-icon bank-icon">⌂</span><span>Bank</span></div>
+      <div class="merge-core">
+        <span class="core-ring ring-one"></span>
+        <span class="core-ring ring-two"></span>
+        <span class="core-mark">✓</span>
+      </div>
+    </div>
+    <div class="working-copy">
+      <strong>Reconciling your three sources</strong>
+      <span id="workingText">Reconciling…</span>
+    </div>
+  </div>
+</div>
+
+<!-- ----------------------------------------------------------- results -->
+<div class="wrap hidden" id="results">
+  <header class="masthead">
+    <div class="brand result-head">
+      <div>
+        <h1>Reconciliation Close Desk</h1>
+        <div class="files">Reconciled in <span class="num" id="clock"></span> from
+          <span id="ranFiles"></span></div>
+      </div>
+    </div>
+    <div class="result-actions">
+      <button class="btn ghost" id="again" type="button">New reconciliation</button>
+      <button class="btn ghost" id="dlReport" type="button">Download report</button>
+      <button class="btn ghost" id="dlAudit" type="button">Download audit trail</button>
+    </div>
+  </header>
+
+  {% include "_desk.html" %}
+</div>
+
+<script src="{{ url_for('static', filename='desk.js') }}"></script>
+<script src="{{ url_for('static', filename='upload.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<div class="verdict">
+  <div class="verdict-main">
+    <div class="eyebrow">Period close decision</div>
+    <div class="stamp" id="stamp">—</div>
+    <p class="verdict-line" id="verdictLine"></p>
+    <p class="verdict-note" id="verdictNote"></p>
+  </div>
+  <div class="verdict-side">
+    <div class="eyebrow">Seven conditions</div>
+    <div class="conds" id="conds"></div>
+  </div>
+</div>
+
+<div class="band" id="band"></div>
+<div class="identity" id="identity"></div>
+
+<div class="cols">
+  <main>
+    <section>
+      <div class="sec-head">
+        <h2>What to do today</h2>
+        <div class="meta" id="queueMeta"></div>
+      </div>
+      <p class="sec-intro" id="queueIntro"></p>
+      <div id="queue"></div>
+      <div class="threshold-note" id="thresholdNote"></div>
+    </section>
+  </main>
+
+  <aside>
+    <div class="card">
+      <h3>Is the number honest?</h3>
+      <p class="lede">Scored against an answer key the pipeline never reads.</p>
+      <div id="scorecard"></div>
+    </div>
+
+    <div class="card">
+      <h3>Where the money is at risk</h3>
+      <p class="lede">By reason code, largest first.</p>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="card">
+      <h3>Audit trail</h3>
+      <p class="lede">Each entry carries the SHA-256 of the one before it.</p>
+      <div id="chain"></div>
+    </div>
+
+    <div class="card">
+      <h3>Where the AI is</h3>
+      <p class="lede">And, mostly, where it is not.</p>
+      <table class="ai-table">
+        <thead><tr><th>Stage</th><th>Model</th></tr></thead>
+        <tbody>
+          <tr><td>Ledger → settlement</td><td><span class="ai-no">No</span></td></tr>
+          <tr><td>Settlement → bank</td><td><span class="ai-no">No</span></td></tr>
+          <tr><td>Reference scan</td><td><span class="ai-no">No</span></td></tr>
+          <tr><td>Fuzzy recovery</td><td><span class="ai-no">No</span></td></tr>
+          <tr><td>Reading a mangled reference</td><td><span class="ai-yes">Yes</span></td></tr>
+          <tr><td>Triage &amp; routing</td><td><span class="ai-no">No</span></td></tr>
+          <tr><td>Close decision</td><td><span class="ai-no">No</span></td></tr>
+        </tbody>
+      </table>
+      <div class="kv" style="margin-top:12px"><span class="k">Model calls this run</span><span class="v" id="llmCalls"></span></div>
+      <div class="kv"><span class="k">References recovered free</span><span class="v" id="fuzzyCount"></span></div>
+    </div>
+  </aside>
+</div>
+
+<section class="refusal">
+  <div class="refusal-grid">
+    <div>
+      <div class="eyebrow" style="color:var(--refuse)">The part that refuses</div>
+      <span class="count" id="refuseCount">0</span>
+    </div>
+    <div>
+      <h2>What it would not guess</h2>
+      <p id="refuseText"></p>
+      <p style="font-size:12.5px;color:var(--ink-3);font-style:italic">
+        A credit that matches two outstanding settlements equally well — same amount, same window — cannot
+        be attributed by any amount check. Guessing produces a match that passes every test and is still
+        wrong. So it is reported as ambiguous instead, and a human decides.
+      </p>
+    </div>
+  </div>
+</section>
+
+<div class="colophon">
+  <div>Generated from <span class="num" id="genSource"></span> · pipeline run <span class="num" id="genTime"></span></div>
+  <div><span class="num" id="genThroughput"></span></div>
+</div>
