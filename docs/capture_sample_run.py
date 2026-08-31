@@ -60,6 +60,11 @@ def sample_audit(path):
     be near-identical, so this takes a spread across stages and decisions so the
     file actually shows what the trail records: matches, each kind of exception,
     and the link proposals the later tiers make.
+
+    Because the entries are non-consecutive, the excerpt deliberately does NOT
+    verify as a hash chain -- verify_chain() reports a gap at the first skip,
+    which is precisely the behaviour that makes the real trail worth having. The
+    docs table says so, so nobody reads a sampled file as a broken audit trail.
     """
     entries = [json.loads(line) for line in
                path.read_text().strip().splitlines() if line.strip()]
@@ -153,8 +158,9 @@ templates. No line of `src/` changes to run it.
 | `sample-run.md` | this transcript |
 | `reconciliation_report.json` | the full report from the primary run |
 | `evaluation.json` | ground-truth scoring and the tier ablation |
-| `audit_trail_sample.jsonl` | a representative spread of decisions, one per distinct stage/verdict shape |
+| `audit_trail_sample.jsonl` | a representative spread of decisions, one per distinct stage/verdict shape. **An excerpt, so it does not verify as a hash chain** — non-consecutive entries are exactly what `verify_chain` is built to reject. The full trail it was sampled from does verify, which is what `audit_trail_intact` reports above |
 | `capture_sample_run.py` | the script that generated all of the above |
+| `benchmark.py` | regenerates the throughput table in the README; seeded, so every column but the timings reproduces exactly |
 """
 
     (DOCS / "sample-run.md").write_text(transcript)

@@ -15,10 +15,14 @@ The boundary, stated precisely:
   * Its output is a link proposal, not a match. A proposal only decides which
     settlement a bank credit gets compared against.
 
-Model choice: gpt-4o-mini. The tier is scoped so tightly that a full run makes
-two calls regardless of batch size, so this is not a capability bottleneck --
-it is reading a reference number out of one short string. The cheapest model
-that supports strict structured outputs is the right tool for that.
+Model choice: gpt-4o-mini. The tier is scoped so tightly that a full run on the
+primary batch makes three calls, two of which resolve a reference. That count
+tracks how many narrations the deterministic tiers genuinely cannot recover, not
+how many orders there are -- it is the same three at 57, 502 and 5,000 orders on
+this fixture, because the fuzzy tier absorbs everything that scales. Either way
+this is not a capability bottleneck: it is reading a reference number out of one
+short string, and the cheapest model that supports strict structured outputs is
+the right tool for that.
 
 Requires OPENAI_API_KEY in the environment. If it isn't set, every row is
 routed straight to the exception bucket instead of guessing -- a missing key

@@ -1,0 +1,60 @@
+<title>Reconciliation Close Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+/*__CSS__*/
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <h1>Reconciliation Close Desk</h1>
+      <p>Ledger against Razorpay settlements against the bank statement. Every figure below is
+         produced by the pipeline in <span class="num" id="clock"></span>, and nothing on this page is
+         typed by hand. This is a captured run — the <a href="https://github.com/Mihir1107/cash-me-if-you-can">tool
+         itself</a> takes your own three CSVs.</p>
+    </div>
+    <div class="switch">
+      <div class="switch-row" role="group" aria-label="Which batch to show">
+        <button type="button" data-batch="realistic" aria-pressed="true">Real month · 2,000</button>
+        <button type="button" data-batch="primary" aria-pressed="false">Test fixture · 57</button>
+        <button type="button" data-batch="stress" aria-pressed="false">At volume · 5,000</button>
+      </div>
+      <div class="hint">Same code, same thresholds. Only the batch differs.</div>
+    </div>
+  </header>
+
+<!--__DESK__-->
+</div>
+
+<script>
+/*__DESK_JS__*/
+</script>
+
+<script id="run-data" type="application/json">/*__DATA__*/</script>
+<script>
+/* Artifact-only boot: pick a run out of the embedded set and hand it to Desk. */
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("run-data").textContent);
+
+  function show(key) {
+    var run = DATA.runs[key];
+    run.generated_at = DATA.generated_at;
+    Desk.render(run);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll(".switch button"), function (b) {
+    b.addEventListener("click", function () {
+      Array.prototype.forEach.call(document.querySelectorAll(".switch button"), function (o) {
+        o.setAttribute("aria-pressed", o === b ? "true" : "false");
+      });
+      show(b.dataset.batch);
+    });
+  });
+
+  show("realistic");
+})();
+</script>

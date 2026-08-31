@@ -267,20 +267,20 @@
     "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
   },
   "throughput": {
-    "wall_clock_ms": 6879.51,
+    "wall_clock_ms": 5335.86,
     "orders": 57,
     "bank_rows": 50,
     "records_processed": 107,
-    "records_per_second": 15.6,
+    "records_per_second": 20.1,
     "llm_calls": 3,
     "llm_calls_per_100_orders": 5.26,
     "stage_ms": {
-      "load_sources": 0.65,
-      "stage_a_ledger_settlement": 1.45,
-      "tier1_narration_regex": 0.73,
+      "load_sources": 1.11,
+      "stage_a_ledger_settlement": 1.53,
+      "tier1_narration_regex": 0.79,
       "tier2_narration_fuzzy": 0.38,
-      "tier3_narration_llm": 6859.38,
-      "stage_b_settlement_bank": 11.67
+      "tier3_narration_llm": 5315.23,
+      "stage_b_settlement_bank": 11.51
     }
   },
   "bank_source_error": null,
@@ -704,7 +704,7 @@
       },
       {
         "condition": "cash_attributable",
-        "why": "21,669.80 of bank credits cannot be tied to any settlement, which is above the materiality threshold of 3,322.13.",
+        "why": "21,669.80 of bank credits cannot be tied to any settlement, which is above the triage threshold of 3,322.13.",
         "action": "Attribute the credits by hand, or hold them in suspense and disclose.",
         "value_at_risk": 21669.8,
         "detail": {
@@ -713,7 +713,7 @@
       },
       {
         "condition": "material_exceptions_resolved",
-        "why": "10 incident(s) above the materiality threshold are still open.",
+        "why": "10 incident(s) above the triage threshold are still open.",
         "action": "Work the triage queue, or record a documented decision to accept each one.",
         "value_at_risk": 396392.44,
         "detail": {

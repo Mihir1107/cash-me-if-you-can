@@ -1,0 +1,901 @@
+<title>Reconciliation Close Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+/* Close Desk Dark Theme Visual System
+   Sleek obsidian dark UI with glassmorphism, cyan & indigo glowing accents, and crisp contrast.
+   Preserves 100% of data bindings, logic, and API contracts.
+*/
+
+:root {
+  --canvas: #080c14;
+  --surface: #0f172a;
+  --surface-glass: rgba(15, 23, 42, 0.75);
+  --surface-raised: rgba(30, 41, 59, 0.7);
+  
+  --text-main: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-subtle: #64748b;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-glow: rgba(59, 130, 246, 0.4);
+
+  --brand-accent: #3b82f6;
+  --brand-cyan: #06b6d4;
+  --brand-indigo: #6366f1;
+  --brand-glow: rgba(59, 130, 246, 0.3);
+
+  --pass-bg: rgba(16, 185, 129, 0.12);
+  --pass-text: #34d399;
+  --pass-border: rgba(16, 185, 129, 0.35);
+
+  --fail-bg: rgba(244, 63, 94, 0.12);
+  --fail-text: #fb7185;
+  --fail-border: rgba(244, 63, 94, 0.35);
+
+  --warn-bg: rgba(245, 158, 11, 0.12);
+  --warn-text: #fbbf24;
+  --warn-border: rgba(245, 158, 11, 0.35);
+
+  --refuse-bg: rgba(139, 92, 246, 0.12);
+  --refuse-text: #c084fc;
+  --refuse-border: rgba(139, 92, 246, 0.35);
+
+  --font-head: 'Outfit', 'Inter', sans-serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --shadow-glass: 0 10px 30px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-glow: 0 0 25px rgba(59, 130, 246, 0.2);
+}
+
+* { box-sizing: border-box; }
+html { background: var(--canvas); color-scheme: dark; }
+body {
+  margin: 0;
+  color: var(--text-main);
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(circle at 50% -10%, rgba(37, 99, 235, 0.18), transparent 60%),
+    radial-gradient(circle at 90% 40%, rgba(99, 102, 241, 0.1), transparent 50%),
+    radial-gradient(circle at 10% 80%, rgba(6, 182, 212, 0.08), transparent 50%);
+  background-attachment: fixed;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  color: var(--text-main);
+  font-family: var(--font-head);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.card-eyebrow {
+  color: #60a5fa;
+  font-family: var(--font-head);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.hidden { display: none !important; }
+
+.glass-panel {
+  background: var(--surface-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-glass);
+  border-radius: 16px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ----------------------------------------------------------- ANIMATIONS */
+.animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.drop-stagger-1 { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s backwards; }
+.drop-stagger-2 { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.10s backwards; }
+.drop-stagger-3 { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.15s backwards; }
+
+/* --------------------------------------------------------------- INTAKE */
+.intake { max-width: 1160px; margin: 0 auto; padding: 40px 24px 80px; }
+.app-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
+.product-bar { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.product-logo {
+  display: inline-grid; width: 34px; height: 34px; place-items: center;
+  border-radius: 10px; background: linear-gradient(135deg, #2563eb, #4f46e5); color: #fff; font-size: 17px;
+  box-shadow: 0 0 15px rgba(37, 99, 235, 0.5);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.product-bar:hover .product-logo { transform: rotate(12deg) scale(1.08); }
+
+.product-name { font-family: var(--font-head); font-weight: 700; color: #fff; font-size: 16px; }
+.product-divider { color: var(--text-subtle); }
+.product-context { color: var(--text-muted); font-weight: 500; }
+
+.privacy-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 20px; background: var(--pass-bg); border: 1px solid var(--pass-border);
+  color: var(--pass-text); font-size: 13px;
+}
+.privacy-dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 10px #34d399; animation: pulseDot 2s infinite; }
+
+@keyframes pulseDot {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
+.hero-card {
+  display: flex; justify-content: space-between; align-items: center; gap: 32px;
+  padding: 40px; border-radius: 20px; background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
+  border: 1px solid var(--border-strong); box-shadow: var(--shadow-glass); margin-bottom: 36px;
+  position: relative; overflow: hidden;
+}
+.hero-card::before {
+  content: ""; position: absolute; top: -50%; right: -10%; width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.25) 0%, transparent 70%); pointer-events: none;
+}
+.hero-tag { display: inline-block; padding: 4px 10px; border-radius: 6px; background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(147, 197, 253, 0.3); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px; }
+.hero-content h1 { font-size: 32px; color: #ffffff; line-height: 1.2; margin-bottom: 12px; }
+.hero-content p { max-width: 62ch; color: var(--text-secondary); font-size: 15.5px; line-height: 1.6; margin: 0; }
+
+.hero-stats { display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
+.stat-box { padding: 12px 20px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border); text-align: center; }
+.stat-num { display: block; font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: #60a5fa; }
+.stat-lbl { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.upload-form { display: flex; flex-direction: column; gap: 20px; }
+.section-title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
+.section-title-row h2 { font-size: 22px; color: #fff; }
+.sub-title { color: var(--text-muted); font-size: 13.5px; margin: 2px 0 0; }
+.step-guide { color: #60a5fa; font-family: var(--font-mono); font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 20px; background: rgba(59, 130, 246, 0.15); border: 1px solid var(--border-glow); }
+
+.drops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.drop {
+  position: relative; display: flex; flex-direction: column; gap: 14px;
+  min-height: 250px; padding: 24px; border: 2px dashed var(--border-strong);
+  border-radius: 16px; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-glass); cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.drop:hover, .drop:focus-within { transform: translateY(-4px); border-color: var(--brand-accent); border-style: solid; background: rgba(15, 23, 42, 0.85); box-shadow: var(--shadow-glow); }
+.drop.over { border-color: #38bdf8; border-style: solid; background: rgba(14, 165, 233, 0.15); transform: scale(1.02); }
+.drop.filled { border-style: solid; border-color: var(--pass-border); background: var(--pass-bg); }
+.drop.bad { border-style: solid; border-color: var(--fail-border); background: var(--fail-bg); }
+.drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.drop-top-row { display: flex; align-items: center; justify-content: space-between; }
+.step-badge { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-family: var(--font-mono); font-size: 12px; font-weight: 700; border: 1px solid rgba(96, 165, 250, 0.3); }
+.drop.filled .step-badge { background: rgba(16, 185, 129, 0.25); color: #34d399; border-color: rgba(52, 211, 153, 0.4); }
+.file-tag { padding: 3px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.06); color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+
+.drop-icon-area { color: #60a5fa; opacity: 0.8; transition: transform 0.2s ease; }
+.drop:hover .drop-icon-area { transform: translateY(-2px); opacity: 1; }
+.upload-icon { width: 28px; height: 28px; }
+
+.drop-body h3 { font-size: 18px; color: #fff; margin-bottom: 4px; }
+.drop-body .what { color: var(--text-muted); font-size: 13px; line-height: 1.45; margin: 0; }
+.drop .cols { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text-subtle); font-size: 11px; line-height: 1.5; }
+.cols-title { display: block; font-weight: 700; color: var(--text-secondary); margin-bottom: 2px; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
+.drop .file { z-index: 1; margin-top: auto; padding: 8px 12px; border-radius: 8px; background: rgba(16, 185, 129, 0.15); border: 1px solid var(--pass-border); color: #34d399; font-family: var(--font-mono); font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; animation: scalePop 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes scalePop {
+  0% { transform: scale(0.92); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.controls-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 12px; }
+.action-buttons { display: flex; gap: 14px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 46px; padding: 12px 24px; border-radius: 12px; font-family: var(--font-head);
+  font-size: 14.5px; font-weight: 700; cursor: pointer; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid transparent;
+}
+.btn-glow {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff;
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.4);
+}
+.btn-glow:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 0 30px rgba(37, 99, 235, 0.6); }
+.btn-glow:active:not(:disabled) { transform: translateY(0); }
+.btn-glow:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.6); box-shadow: none; }
+
+.btn-glass {
+  background: rgba(255, 255, 255, 0.06); color: var(--text-main);
+  border-color: var(--border-strong); backdrop-filter: blur(8px);
+}
+.btn-glass:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.3); transform: translateY(-1px); }
+
+.btn-arrow { transition: transform 0.2s ease; }
+.btn-glow:hover:not(:disabled) .btn-arrow { transform: translateX(4px); }
+
+.status-indicator { color: var(--text-muted); font-size: 13.5px; font-weight: 500; }
+
+.opts { padding: 18px 22px; border: 1px solid var(--border); border-radius: 14px; background: rgba(15, 23, 42, 0.5); }
+.opts summary { cursor: pointer; font-weight: 600; color: #fff; font-size: 14.5px; user-select: none; }
+.opts .body { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.opt-row { display: flex; flex-direction: column; gap: 4px; }
+.opt-label-group label { font-weight: 600; color: #fff; }
+.opt-desc { color: var(--text-muted); font-size: 12.5px; }
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; color: #fff; }
+.file-input-inline { margin-top: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+
+.problem { padding: 20px 24px; border-radius: 14px; background: var(--fail-bg); border: 1px solid var(--fail-border); margin-top: 20px; animation: fadeIn 0.3s ease; }
+.problem h3 { color: var(--fail-text); font-size: 17px; margin-bottom: 6px; }
+.problem p { color: var(--text-secondary); margin: 0 0 6px; font-size: 14px; }
+.problem code { font-family: var(--font-mono); font-size: 12px; background: rgba(0, 0, 0, 0.4); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--fail-border); }
+
+/* ---------------------------------------------------- LOADING ANIMATION CARD */
+.working {
+  display: flex; align-items: center; gap: 20px; padding: 24px 28px;
+  border-radius: 16px; background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.35);
+  box-shadow: 0 0 30px rgba(14, 165, 233, 0.2); margin-top: 24px;
+  animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.loading-visual { position: relative; display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; }
+.pulse-ring-glow {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 2px solid rgba(56, 189, 248, 0.3); animation: pulseGlow 1.5s ease-out infinite;
+}
+@keyframes pulseGlow {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.spinner-neon { width: 28px; height: 28px; border: 3px solid rgba(56, 189, 248, 0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+.loading-details { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
+.loading-title { font-weight: 700; font-size: 15px; color: #7dd3fc; }
+.loading-step { color: #38bdf8; font-family: var(--font-mono); font-size: 13px; font-weight: 500; }
+
+.shimmer-track { height: 6px; background: rgba(56, 189, 248, 0.15); border-radius: 99px; overflow: hidden; margin-top: 6px; position: relative; }
+.shimmer-fill { height: 100%; width: 45%; background: linear-gradient(90deg, #38bdf8, #818cf8, #38bdf8); border-radius: inherit; animation: shimmerSlide 1.2s ease-in-out infinite; }
+
+@keyframes shimmerSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+/* -------------------------------------------------------------- RESULTS */
+.wrap { max-width: 1260px; margin: 0 auto; padding: 36px 24px 96px; }
+.masthead { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+.report-badge { display: inline-block; padding: 3px 10px; border-radius: 6px; background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(147, 197, 253, 0.3); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.masthead h1 { font-size: 28px; color: #fff; }
+.run-meta { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+.meta-sep { margin: 0 6px; color: var(--border-strong); }
+.result-actions { display: flex; gap: 10px; }
+
+.review-stepper { display: flex; align-items: center; gap: 12px; margin-top: 20px; color: var(--text-muted); font-size: 13px; }
+.step { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; background: var(--surface-glass); border: 1px solid var(--border); font-weight: 600; color: var(--text-secondary); transition: all 0.2s ease; }
+.step.active { border-color: var(--brand-accent); color: #60a5fa; background: rgba(59, 130, 246, 0.15); }
+.step span { display: inline-grid; width: 18px; height: 18px; place-items: center; border-radius: 50%; background: rgba(255, 255, 255, 0.1); font-family: var(--font-mono); font-size: 10px; }
+.step-arrow { color: var(--text-subtle); }
+
+/* ------------------------------------------------------------ VERDICT CARD */
+.verdict-card { margin-top: 28px; overflow: hidden; }
+.verdict-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px; border-bottom: 1px solid var(--border); background: rgba(255, 255, 255, 0.02); }
+.verdict-title-group h2 { font-size: 20px; color: #fff; }
+.decision-context { color: var(--text-muted); font-size: 12px; font-weight: 500; }
+
+.verdict-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr); }
+.verdict-status-panel { padding: 28px; border-right: 1px solid var(--border); }
+.stamp-wrapper { display: flex; align-items: center; gap: 16px; }
+.stamp { display: inline-flex; padding: 8px 20px; border-radius: 12px; font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; animation: stampPop 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+
+@keyframes stampPop {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.stamp.blocked { background: var(--fail-bg); color: var(--fail-text); border: 1px solid var(--fail-border); box-shadow: 0 0 25px rgba(244, 63, 94, 0.25); }
+.stamp.clear { background: var(--pass-bg); color: var(--pass-text); border: 1px solid var(--pass-border); box-shadow: 0 0 25px rgba(16, 185, 129, 0.25); }
+
+.status-details { display: flex; flex-direction: column; }
+.status-heading { font-weight: 700; font-size: 16px; color: #fff; }
+.status-copy { color: var(--text-muted); font-size: 13px; }
+
+.verdict-line { margin: 20px 0 0; color: var(--text-secondary); font-size: 16.5px; line-height: 1.55; }
+.verdict-line strong { color: #fff; font-family: var(--font-mono); font-weight: 700; }
+.verdict-note { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 13px; }
+
+.verdict-checklist-panel { padding: 28px; background: rgba(0, 0, 0, 0.2); }
+.checklist-header h3 { font-size: 17px; color: #fff; margin-bottom: 2px; }
+.checklist-help { color: var(--text-muted); font-size: 12.5px; margin: 0 0 16px; }
+
+.conds { display: flex; flex-direction: column; gap: 6px; }
+.cond { display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 8px; font-size: 13px; transition: background 0.15s ease; }
+.cond:hover { background: rgba(255, 255, 255, 0.04); }
+.cond-mark { display: grid; width: 18px; height: 18px; place-items: center; border-radius: 50%; font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+.cond.fail .cond-mark { background: var(--fail-bg); color: var(--fail-text); border: 1px solid var(--fail-border); }
+.cond.pass .cond-mark { background: var(--pass-bg); color: var(--pass-text); border: 1px solid var(--pass-border); }
+.cond-name { color: var(--text-secondary); font-weight: 600; }
+.cond.pass .cond-name { color: var(--text-muted); font-weight: 500; }
+.cond-val { color: var(--fail-text); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+
+/* ---------------------------------------------------- FINANCIAL POSITION */
+.section-container { margin-top: 36px; }
+.section-header { margin-bottom: 16px; }
+.section-header h2 { font-size: 22px; color: #fff; }
+.section-desc { color: var(--text-muted); font-size: 13.5px; margin: 2px 0 0; }
+
+.financial-card { overflow: hidden; }
+.band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.band-cell { padding: 24px; border-right: 1px solid var(--border); transition: background 0.2s ease; }
+.band-cell:last-child { border-right: 0; }
+.band-cell .eyebrow { color: var(--text-muted); font-size: 11px; }
+.band-cell .v { display: block; margin-top: 8px; color: #fff; font-family: var(--font-mono); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.band-cell .sub { margin-top: 4px; color: var(--text-muted); font-size: 12.5px; }
+
+.band-cell.at-risk { background: rgba(244, 63, 94, 0.08); }
+.band-cell.at-risk .v { color: #fb7185; }
+.band-cell.at-risk .eyebrow { color: #fb7185; }
+
+.band-cell.confirmed { background: rgba(16, 185, 129, 0.08); }
+.band-cell.confirmed .v { color: #34d399; }
+.band-cell.confirmed .eyebrow { color: #34d399; }
+
+.identity-block { display: grid; grid-template-columns: 180px 1fr; border-top: 1px solid var(--border); background: rgba(0, 0, 0, 0.25); }
+.identity-label { display: flex; align-items: center; gap: 8px; padding: 12px 24px; border-right: 1px solid var(--border); color: var(--text-secondary); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.identity { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 24px; color: var(--text-main); font-family: var(--font-mono); font-size: 13px; }
+.identity .ok-chip { padding: 3px 8px; border-radius: 4px; color: #34d399; background: var(--pass-bg); border: 1px solid var(--pass-border); font-family: var(--font-sans); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.identity .why { color: var(--text-muted); font-family: var(--font-sans); font-size: 12.5px; }
+
+/* --------------------------------------------------------------- QUEUE */
+#results .cols { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(310px, 0.9fr); gap: 32px; margin-top: 36px; align-items: start; }
+.queue-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.queue-header h2 { font-size: 22px; color: #fff; }
+.meta-pill { padding: 4px 12px; border-radius: 20px; background: rgba(255, 255, 255, 0.08); color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; font-weight: 600; border: 1px solid var(--border); }
+.queue-intro { color: var(--text-muted); font-size: 14px; line-height: 1.55; margin: 0 0 20px; }
+
+.owner-group { border: 1px solid var(--border); border-radius: 14px; background: var(--surface-glass); backdrop-filter: blur(12px); box-shadow: var(--shadow-glass); overflow: hidden; margin-bottom: 20px; transition: border-color 0.2s ease; }
+.owner-group:hover { border-color: var(--border-strong); }
+.owner-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: rgba(0, 0, 0, 0.3); }
+.owner-name { font-weight: 700; font-size: 12px; color: #fff; letter-spacing: 0.08em; text-transform: uppercase; }
+.owner-meta { color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; }
+
+.item { display: grid; grid-template-columns: 4px 1fr; border-bottom: 1px solid var(--border); transition: background 0.15s ease; }
+.item:last-child { border-bottom: 0; }
+.item .stripe { background: var(--border); }
+.item.critical .stripe { background: #fb7185; }
+.item.high .stripe { background: #fbbf24; }
+.item.medium .stripe { background: #60a5fa; }
+
+.item-btn { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; width: 100%; padding: 14px 20px; border: 0; background: none; cursor: pointer; text-align: left; font-family: inherit; transition: background 0.15s ease; }
+.item-btn:hover { background: rgba(255, 255, 255, 0.03); }
+.item-btn[aria-expanded="true"] { background: rgba(59, 130, 246, 0.12); }
+.item-title { font-weight: 700; font-size: 15.5px; color: #fff; }
+.item-val { color: #fb7185; font-family: var(--font-mono); font-size: 14px; font-weight: 700; white-space: nowrap; }
+.item-sub { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+.pill { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.pill.critical { color: #fb7185; background: var(--fail-bg); border: 1px solid var(--fail-border); }
+.pill.high { color: #fbbf24; background: var(--warn-bg); border: 1px solid var(--warn-border); }
+.pill.medium { color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(96, 165, 250, 0.3); }
+.pill.low, .pill.below { color: var(--text-muted); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); }
+.pill.below { border-style: dashed; }
+
+.item-body { display: none; padding: 4px 20px 20px; animation: fadeIn 0.2s ease; }
+.item.open .item-body { display: block; }
+.item-body .action { margin: 8px 0 10px; padding: 12px 14px; border-left: 3px solid #3b82f6; background: rgba(59, 130, 246, 0.1); color: var(--text-main); font-size: 13.5px; line-height: 1.48; border-radius: 0 6px 6px 0; }
+.item-body .basis { margin: 0 0 10px; color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; }
+.orders { display: flex; flex-wrap: wrap; gap: 4px; }
+.orders code { padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: rgba(0, 0, 0, 0.3); color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; transition: border-color 0.15s ease; }
+.orders code:hover { border-color: var(--brand-accent); }
+
+.threshold-note { margin-top: 16px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: rgba(15, 23, 42, 0.5); color: var(--text-muted); font-size: 13px; }
+
+/* ---------------------------------------------------------- SIDEBAR */
+.sidebar-column .card { padding: 20px; margin-bottom: 20px; }
+.card-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.card-title-row h3 { font-size: 17px; color: #fff; }
+.card-subtitle { color: var(--text-muted); font-size: 12px; margin: 0 0 14px; }
+
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.kv:last-child { border-bottom: 0; }
+.kv .k { color: var(--text-muted); }
+.kv .v { color: #fff; font-family: var(--font-mono); font-weight: 600; }
+.kv .v.good { color: #34d399; }
+.kv .v.bad { color: #fb7185; }
+
+.bars { display: flex; flex-direction: column; gap: 10px; }
+.bar-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; }
+.bar-row .lbl { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.bar-row .amt { color: #fff; font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; }
+.bar-track { grid-column: 1 / -1; display: block; height: 6px; overflow: hidden; border-radius: 99px; background: rgba(255, 255, 255, 0.08); }
+.bar-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3b82f6, #06b6d4); transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.bar-row.reversed .bar-fill, .bar-row.unbooked .bar-fill { background: linear-gradient(90deg, #f43f5e, #e11d48); }
+
+.ai-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ai-table th { padding: 0 0 6px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 10px; font-weight: 700; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; }
+.ai-table th:last-child, .ai-table td:last-child { text-align: right; }
+.ai-table td { padding: 6px 0; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+.ai-table tr:last-child td { border-bottom: 0; }
+.ai-no { color: var(--text-muted); }
+.ai-yes { color: #60a5fa; font-weight: 700; }
+.kv-grid { margin-top: 10px; }
+
+.chain { display: flex; align-items: center; gap: 8px; color: #fff; font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+.chain .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; box-shadow: 0 0 10px #34d399; }
+.chain.broken .dot { background: #fb7185; box-shadow: 0 0 10px #fb7185; }
+.hashes { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; word-break: break-all; }
+
+/* ------------------------------------------------------ REFUSAL BANNER */
+.refusal-section { margin-top: 36px; }
+.refusal-card { display: grid; grid-template-columns: minmax(160px, 0.3fr) 1fr; gap: 28px; padding: 28px; border: 1px solid var(--refuse-border); background: var(--refuse-bg); }
+.refuse-number { color: #c084fc; font-family: var(--font-mono); font-size: 44px; font-weight: 800; line-height: 1; display: block; margin-top: 4px; text-shadow: 0 0 15px rgba(192, 132, 252, 0.4); }
+.refuse-label { color: #c084fc; font-size: 12.5px; font-weight: 700; }
+.refusal-text-column h2 { color: #e9d5ff; font-size: 20px; margin-bottom: 6px; }
+.refusal-text-column p { color: var(--text-secondary); font-size: 14px; margin: 0 0 12px; line-height: 1.5; }
+.refusal-note-box { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 8px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--refuse-border); color: #d8b4fe; font-size: 12.5px; }
+
+.colophon { display: flex; justify-content: space-between; align-items: center; margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; }
+
+@media (max-width: 900px) {
+  .hero-card { flex-direction: column; align-items: flex-start; }
+  .hero-stats { flex-direction: row; width: 100%; }
+  .stat-box { flex: 1; }
+  .verdict-grid, #results .cols, .refusal-card { grid-template-columns: 1fr; }
+  .drops { grid-template-columns: 1fr; }
+  .band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <h1>Reconciliation Close Desk</h1>
+      <p>Ledger against Razorpay settlements against the bank statement. Every figure below is
+         produced by the pipeline in <span class="num" id="clock"></span>, and nothing on this page is
+         typed by hand. This is a captured run — the <a href="https://github.com/Mihir1107/cash-me-if-you-can">tool
+         itself</a> takes your own three CSVs.</p>
+    </div>
+    <div class="switch">
+      <div class="switch-row" role="group" aria-label="Which batch to show">
+        <button type="button" data-batch="realistic" aria-pressed="true">Real month · 2,000</button>
+        <button type="button" data-batch="primary" aria-pressed="false">Test fixture · 57</button>
+        <button type="button" data-batch="stress" aria-pressed="false">At volume · 5,000</button>
+      </div>
+      <div class="hint">Same code, same thresholds. Only the batch differs.</div>
+    </div>
+  </header>
+
+<div class="verdict-card glass-panel">
+  <div class="verdict-header">
+    <div class="verdict-title-group">
+      <span class="card-eyebrow">PERIOD CLOSE AUDIT</span>
+      <h2>Period Close Gate Verdict</h2>
+    </div>
+    <span class="decision-context">Automated 3-Way Control Verification</span>
+  </div>
+
+  <div class="verdict-grid">
+    <div class="verdict-status-panel">
+      <div class="stamp-wrapper">
+        <div class="stamp" id="stamp">—</div>
+        <div class="status-details">
+          <span class="status-heading">Period Close Decision</span>
+          <span class="status-sub">Based on automated cross-validation of all 7 control checks</span>
+        </div>
+      </div>
+      <p class="verdict-line" id="verdictLine"></p>
+      <p class="verdict-note" id="verdictNote"></p>
+    </div>
+
+    <div class="verdict-checklist-panel">
+      <div class="checklist-header">
+        <h3>Mandatory Checklist</h3>
+        <p class="checklist-help">All 7 control conditions must pass before period close.</p>
+      </div>
+      <div class="conds" id="conds"></div>
+    </div>
+  </div>
+</div>
+
+<section class="section-container">
+  <div class="section-header">
+    <div>
+      <span class="card-eyebrow">FINANCIAL POSITION</span>
+      <h2>3-Way Reconciliation Breakdown</h2>
+    </div>
+    <p class="section-desc">Accounting breakdown across internal books, Razorpay settlements, and bank statement.</p>
+  </div>
+
+  <div class="financial-card glass-panel">
+    <div class="band" id="band"></div>
+    <div class="identity-block">
+      <div class="identity-label">
+        <span class="check-icon">⚖️</span>
+        <span>Control Check</span>
+      </div>
+      <div class="identity" id="identity"></div>
+    </div>
+  </div>
+</section>
+
+<div class="cols">
+  <main class="main-column">
+    <section class="section-container">
+      <div class="queue-header">
+        <div>
+          <span class="card-eyebrow">ACTION QUEUE</span>
+          <h2>Exceptions &amp; Incident Actions</h2>
+        </div>
+        <div class="meta-pill" id="queueMeta"></div>
+      </div>
+      <p class="queue-intro" id="queueIntro"></p>
+      <div id="queue" class="queue-list"></div>
+      <div class="threshold-note" id="thresholdNote"></div>
+    </section>
+  </main>
+
+  <aside class="sidebar-column">
+    <div class="card glass-panel">
+      <div class="card-title-row">
+        <span class="card-icon">🎯</span>
+        <h3>Validation Scorecard</h3>
+      </div>
+      <p class="card-subtitle">Performance measured against independent answer key.</p>
+      <div id="scorecard"></div>
+    </div>
+
+    <div class="card glass-panel">
+      <div class="card-title-row">
+        <span class="card-icon">📊</span>
+        <h3>Risk Distribution by Cause</h3>
+      </div>
+      <p class="card-subtitle">Financial exposure breakdown by exception reason code.</p>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="card glass-panel">
+      <div class="card-title-row">
+        <span class="card-icon">🛡️</span>
+        <h3>Cryptographic Audit Trail</h3>
+      </div>
+      <p class="card-subtitle">SHA-256 tamper-evident integrity log.</p>
+      <div id="chain"></div>
+    </div>
+
+    <div class="card glass-panel">
+      <div class="card-title-row">
+        <span class="card-icon">🤖</span>
+        <h3>AI Guardrails &amp; Transparency</h3>
+      </div>
+      <p class="card-subtitle">Deterministic engine handles matching; AI strictly assists reading narrations.</p>
+      <table class="ai-table">
+        <thead><tr><th>Pipeline Stage</th><th>AI Assisted?</th></tr></thead>
+        <tbody>
+          <tr><td>Ledger → Settlement</td><td><span class="ai-no">No (Deterministic)</span></td></tr>
+          <tr><td>Settlement → Bank</td><td><span class="ai-no">No (Deterministic)</span></td></tr>
+          <tr><td>Reference Scan</td><td><span class="ai-no">No (Deterministic)</span></td></tr>
+          <tr><td>Fuzzy Recovery</td><td><span class="ai-no">No (Deterministic)</span></td></tr>
+          <tr><td>Mangled Narration Reading</td><td><span class="ai-yes">Yes (LLM Assisted)</span></td></tr>
+          <tr><td>Triage &amp; Routing</td><td><span class="ai-no">No (Deterministic)</span></td></tr>
+          <tr><td>Close Gate Decision</td><td><span class="ai-no">No (Deterministic)</span></td></tr>
+        </tbody>
+      </table>
+      <div class="kv-grid">
+        <div class="kv"><span class="k">LLM API Calls</span><span class="v" id="llmCalls">0</span></div>
+        <div class="kv"><span class="k">Fuzzy Recoveries (Free)</span><span class="v" id="fuzzyCount">0</span></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<section class="refusal-section">
+  <div class="refusal-card glass-panel">
+    <div class="refusal-badge-column">
+      <span class="card-eyebrow" style="color: var(--refuse-text)">SAFETY GUARDRAIL</span>
+      <span class="refuse-number" id="refuseCount">0</span>
+      <span class="refuse-label">Ambiguous Credit Matches</span>
+    </div>
+    <div class="refusal-text-column">
+      <h2>Ambiguity Guardrail — Zero Guesswork Engine</h2>
+      <p id="refuseText"></p>
+      <div class="refusal-note-box">
+        <span class="shield-icon">🛡️</span>
+        <span>If a bank transaction matches multiple candidate settlements, the engine refuses to guess. Ambiguous matches are isolated for human review to guarantee financial accuracy.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="colophon">
+  <div class="colophon-left">
+    <span>Generated from <strong class="num" id="genSource"></strong></span>
+    <span class="sep">•</span>
+    <span>Run Time: <strong class="num" id="genTime"></strong></span>
+  </div>
+  <div class="colophon-right">
+    <span class="num" id="genThroughput"></span>
+  </div>
+</footer>
+
+</div>
+
+<script>
+/* The close desk, rendered.
+ *
+ * One copy of this logic, used by both the live tool and the static artifact.
+ * It takes a report object exactly as `src/report.py` writes it and paints the
+ * page from it -- it computes nothing. Every number here was already stood
+ * behind by the pipeline, which is the only reason the screen can be trusted.
+ */
+(function (global) {
+  "use strict";
+
+  var money = function (n) {
+    if (n === null || n === undefined || isNaN(n)) return "—";
+    return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  var pct = function (n) { return (Math.round(n * 100) / 100).toFixed(2) + "%"; };
+  var words = function (s) { return String(s).replace(/_/g, " "); };
+  /* These are presentation labels only. The report still carries the exact
+     pipeline reason/condition codes; the desk shows their plain-language form. */
+  var labels = {
+    revenue_recorded: "Every sale is recorded",
+    reversals_booked: "Reversals are recorded",
+    cash_attributable: "Bank credits are attributable",
+    material_exceptions_resolved: "Material exceptions are resolved",
+    audit_trail_intact: "Audit trail is intact",
+    sources_verifiable: "Source files are verifiable",
+    books_balance: "Books balance",
+    settlement_not_credited: "Settlement not received in bank",
+    fee_footing_mismatch: "Fees do not reconcile",
+    duplicate_settlement: "Duplicate settlement",
+    no_settlement_found: "No settlement found",
+    bank_amount_mismatch: "Bank amount differs",
+    no_ledger_entry: "Not recorded in ledger",
+    refund_not_reflected: "Refund not reflected",
+    credit_unattributed: "Bank credit needs identification",
+    ledger_gross_amount_mismatch: "Ledger amount differs",
+    settlement_reversed: "Settlement reversed",
+    bank_credit_delayed: "Bank credit delayed",
+    attribution_ambiguous: "Ambiguous bank credit"
+  };
+  var label = function (s) { return labels[s] || words(s); };
+  var el = function (id) { return document.getElementById(id); };
+
+  /* Two hosts render this markup and they do not carry identical furniture --
+     the static artifact has a batch switcher and a clock in its masthead, the
+     live tool has file names and a download row. So optional text is set
+     defensively: a missing span must not take the whole render down with it,
+     which is exactly what it did the first time this ran in the app. */
+  var setText = function (id, value) {
+    var node = el(id);
+    if (node) node.textContent = value;
+  };
+
+  function render(d) {
+    var gate = d.close_gate || {};
+    var m = d.money || {};
+    var t = d.triage || {};
+
+    /* ------------------------------------------------------------ verdict */
+    var blocked = !gate.can_close;
+    var stamp = el("stamp");
+    stamp.textContent = blocked ? "Blocked" : "Can close";
+    stamp.className = "stamp " + (blocked ? "blocked" : "clear");
+
+    el("verdictLine").innerHTML = blocked
+      ? "<strong>" + gate.blocker_count + " of " + gate.conditions_checked + "</strong> conditions fail. "
+        + "<strong>" + money(gate.value_blocking_close) + "</strong> has to be resolved or documented before anyone signs."
+      : "All <strong>" + gate.conditions_checked + "</strong> conditions pass. Nothing outstanding blocks the period.";
+    el("verdictNote").textContent = gate.note || "";
+
+    /* condition ledger, failures first */
+    var byName = {};
+    (gate.blockers || []).forEach(function (b) { byName[b.condition] = b; });
+    var order = (gate.blockers || []).map(function (b) { return b.condition; })
+      .concat(gate.conditions_passed || []);
+    el("conds").innerHTML = order.map(function (name) {
+      var b = byName[name];
+      return '<div class="cond ' + (b ? "fail" : "pass") + '">'
+        + '<span class="cond-mark">' + (b ? "✕" : "✓") + "</span>"
+        + '<span class="cond-name">' + label(name) + "</span>"
+        + '<span class="cond-val">' + (b ? money(b.value_at_risk) : "") + "</span>"
+        + "</div>";
+    }).join("");
+
+    /* -------------------------------------------------------------- money */
+    el("band").innerHTML = [
+      ["Total exposure", money(m.total_exposure), d.total_orders.toLocaleString("en-IN") + " orders in the period", ""],
+      ["Confirmed in bank", money(m.confirmed_value), pct(m.value_match_rate_pct) + " of the book by value", "confirmed"],
+      ["At risk", money(m.at_risk_value), (d.exception_count || 0) + " exception rows", "at-risk"],
+      ["Orders reconciled", pct(d.match_rate_pct), d.reconciled_orders + " of " + d.total_orders + " clean on both legs", ""]
+    ].map(function (c) {
+      return '<div class="band-cell ' + c[3] + '"><span class="eyebrow">' + c[0] + "</span>"
+        + '<span class="v">' + c[1] + "</span>"
+        + '<div class="sub">' + c[2] + "</div></div>";
+    }).join("");
+
+    var id = m.identity || {};
+    el("identity").innerHTML =
+      '<span class="ok-chip">' + (id.holds ? "Balances" : "Does not balance") + "</span>"
+      + "<span>" + money(m.total_exposure) + " = " + money(m.confirmed_value)
+      + " + " + money(m.at_risk_value) + "</span>"
+      + '<span class="why">residual ' + money(id.residual) + " — checked at runtime, printed as a failure if it ever moves</span>";
+
+    /* --------------------------------------------------------- work queue */
+    el("queueMeta").textContent = t.exception_rows + " rows → " + t.incident_count + " incidents";
+    el("queueIntro").textContent =
+      t.exception_rows + " exception rows cluster into " + t.incident_count
+      + " incidents across " + Object.keys(t.by_owner || {}).length + " teams. "
+      + t.material_incident_count + " are above the review threshold and appear first. "
+      + "Open any item to see the recommended next step and supporting evidence.";
+
+    var incidents = (t.incidents || []).slice();
+    var groups = {};
+    incidents.forEach(function (inc) {
+      (groups[inc.owner] = groups[inc.owner] || []).push(inc);
+    });
+    var owners = Object.keys(groups).sort(function (a, b) {
+      return (t.by_owner[b] || {}).value_at_risk - (t.by_owner[a] || {}).value_at_risk;
+    });
+
+    el("queue").innerHTML = owners.map(function (owner) {
+      var o = t.by_owner[owner] || {};
+      var rows = groups[owner].map(function (inc, i) {
+        var cls = inc.material ? inc.urgency : "sub";
+        var ids = (inc.order_ids || []).slice(0, 14)
+          .map(function (x) { return "<code>" + x + "</code>"; }).join("");
+        var more = (inc.order_ids || []).length > 14
+          ? '<code>+' + ((inc.order_ids.length) - 14) + " more</code>" : "";
+        return '<div class="item ' + cls + '" data-key="' + owner + "-" + i + '">'
+          + '<div class="stripe"></div><div>'
+          + '<button class="item-btn" type="button" aria-expanded="false">'
+          + '<span class="item-title">' + label(inc.reason_code) + "</span>"
+          + '<span class="item-val">' + money(inc.value_at_risk) + "</span>"
+          + '<span class="item-sub">'
+          + '<span class="pill ' + inc.urgency + '">' + inc.urgency + "</span>"
+          + (inc.material ? "" : '<span class="pill below">below threshold</span>')
+          + "<span>" + inc.order_count + (inc.order_count === 1 ? " order" : " orders") + "</span>"
+          + "</span></button>"
+          + '<div class="item-body">'
+          + '<p class="action">' + inc.recommended_action + "</p>"
+          + '<p class="basis">' + (inc.sample_basis || "") + "</p>"
+          + '<div class="orders">' + ids + more + "</div>"
+          + "</div></div></div>";
+      }).join("");
+
+      return '<div class="owner-group"><div class="owner-bar">'
+        + '<span class="owner-name">' + words(owner) + "</span>"
+        + '<span class="owner-meta">' + o.incidents + " incidents · " + o.orders
+        + " orders · " + money(o.value_at_risk) + "</span></div>" + rows + "</div>";
+    }).join("");
+
+    el("thresholdNote").innerHTML =
+      "<strong>" + money(t.materiality_threshold) + "</strong> triage threshold. "
+      + t.materiality_basis;
+
+    /* --------------------------------------------------------- scorecard */
+    /* Your own data has no answer key, so there is nothing to score against.
+       Showing an empty scorecard would imply the pipeline had checked itself
+       and found nothing wrong, which is the opposite of what a blank means. */
+    var s = d.scoring;
+    if (!s) {
+      el("scorecard").innerHTML =
+        '<p class="lede" style="margin:0">Your data does not include an independent answer key, so accuracy cannot be measured honestly here. Run a bundled sample to see validation coverage.</p>';
+    } else {
+    el("scorecard").innerHTML = [
+      ["Faults injected", s.injected_faults, ""],
+      ["Detected", s.detected, s.detected === s.injected_faults ? "good" : ""],
+      ["Missed", s.missed, s.missed === 0 ? "good" : "bad"],
+      ["False positives", s.false_positives, s.false_positives ? "bad" : "good"],
+      ["Recall", s.recall, ""],
+      ["Reason-code accuracy", s.accuracy, ""]
+    ].map(function (r) {
+      return '<div class="kv"><span class="k">' + r[0] + "</span>"
+        + '<span class="v ' + r[2] + '">' + r[1] + "</span></div>";
+    }).join("");
+    }
+
+    /* -------------------------------------------------------------- bars */
+    var risk = m.at_risk_by_reason || {};
+    var keys = Object.keys(risk).sort(function (a, b) { return risk[b] - risk[a]; });
+    var top = keys[0] ? risk[keys[0]] : 1;
+    var flag = { settlement_reversed: "reversed", no_ledger_entry: "unbooked", bank_credit_delayed: "delayed" };
+    el("bars").innerHTML = keys.map(function (k) {
+      return '<div class="bar-row ' + (flag[k] || "") + '">'
+        + '<span class="lbl">' + label(k) + "</span>"
+        + '<span class="amt">' + money(risk[k]) + "</span>"
+        + '<span class="bar-track"><span class="bar-fill" style="width:'
+        + Math.max(1, (risk[k] / top) * 100) + '%"></span></span></div>';
+    }).join("");
+
+    /* ------------------------------------------------------------- chain */
+    var a = d.audit_trail || {};
+    el("chain").innerHTML =
+      '<div class="chain ' + (a.intact ? "" : "broken") + '"><span class="dot"></span>'
+      + "<span>" + (a.intact ? "Intact" : "BROKEN at line " + a.broken_at) + "</span></div>"
+      + '<div class="kv" style="margin-top:10px"><span class="k">Entries verified</span>'
+      + '<span class="v">' + (a.verified || 0).toLocaleString("en-IN") + "</span></div>"
+      + '<div class="hashes">' + (d.chain_sample || []).map(function (h) {
+          return "<span>" + h + "</span>";
+        }).join("") + "</div>";
+
+    /* ----------------------------------------------------------- the model */
+    var nr = d.narration_resolution || {};
+    el("llmCalls").textContent = (d.throughput || {}).llm_calls;
+    el("fuzzyCount").textContent = nr.resolved_by_fuzzy_no_llm;
+
+    /* --------------------------------------------------------- refusals */
+    var refused = (d.exception_reason_counts || {}).attribution_ambiguous || 0;
+    el("refuseCount").textContent = refused;
+    el("refuseText").textContent = refused === 0
+      ? "Nothing in this batch was ambiguous enough to refuse. Every credit that reached the "
+        + "verification stage could be told apart from every other outstanding settlement on amount and timing."
+      : refused + " settlement(s) had a credit proposed for them that could equally have belonged to "
+        + "another settlement. The attribution was refused rather than guessed.";
+
+    /* -------------------------------------------------------- colophon */
+    var ms = Math.round((d.throughput || {}).wall_clock_ms);
+    setText("clock", ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms");
+    setText("genSource", d.source_dir);
+    setText("genTime", d.generated_at || new Date().toLocaleString());
+    setText("genThroughput",
+      Math.round((d.throughput || {}).records_per_second).toLocaleString("en-IN")
+      + " records/sec · " + (d.throughput || {}).llm_calls + " model calls");
+  }
+
+  /* Expanding an incident. Delegated, so it survives a re-render. */
+  document.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest(".item-btn") : null;
+    if (!btn) return;
+    var item = btn.closest(".item");
+    var open = item.classList.toggle("open");
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+
+  global.Desk = { render: render, money: money, pct: pct, words: words };
+})(window);
+
+</script>
+
+<script id="run-data" type="application/json">{"generated_at": "2026-08-31 06:36 UTC", "runs": {"primary": {"total_orders": 57, "reconciled_orders": 22, "unreconciled_orders": 35, "match_rate_pct": 38.6, "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank", "stages": {"ledger_settlement": {"matched": 35, "exceptions": 22}, "settlement_bank": {"matched": 39, "exceptions": 13}}, "narration_resolution": {"resolved_by_fuzzy_no_llm": 5, "resolved_by_llm": 0, "unresolved": 3}, "money": {"total_exposure": 664425.15, "confirmed_value": 242514.62, "at_risk_value": 421910.53, "value_match_rate_pct": 36.5, "at_risk_by_reason": {"fee_footing_mismatch": 88397.13, "duplicate_settlement": 75769.24, "no_settlement_found": 64511.08, "bank_credit_delayed": 52592.63, "credit_unattributed": 43868.63, "refund_not_reflected": 41518.23, "no_ledger_entry": 28876.92, "settlement_reversed": 13381.5, "settlement_not_credited": 6201.64, "ledger_gross_amount_mismatch": 3474.27, "bank_amount_mismatch": 3319.26}, "unattributed_bank_credit_value": 43868.63, "identity": {"holds": true, "residual": 0.0, "statement": "total_exposure == confirmed_value + at_risk_value"}, "exposure_note": "exposure = settled_amount where a settlement exists, else the ledger amount (booked revenue with no payout)"}, "triage": {"exception_rows": 35, "incident_count": 11, "material_incident_count": 10, "materiality_threshold": 3322.13, "materiality_basis": "0.5% of this run's exposure, floored at 1,000.00. Operational triage heuristic, not audit materiality under SA 320 / ISA 320.", "value_above_threshold": 418591.27, "value_below_threshold": 3319.26, "by_owner": {"razorpay_support": {"incidents": 5, "orders": 19, "value_at_risk": 238198.35}, "merchant_finance": {"incidents": 4, "orders": 10, "value_at_risk": 117738.05}, "bank_ops": {"incidents": 1, "orders": 5, "value_at_risk": 52592.63}, "chargeback_ops": {"incidents": 1, "orders": 1, "value_at_risk": 13381.5}}, "incidents": [{"reason_code": "no_ledger_entry", "signature": "all", "owner": "merchant_finance", "urgency": "critical", "recommended_action": "Book the missing order. Money was received that the ledger cannot explain, so revenue is understated until it is recorded.", "order_count": 2, "value_at_risk": 28876.92, "material": true, "order_ids": ["order_000901", "order_000902"], "sample_basis": "Razorpay settled 15672.12 for this order but the merchant's ledger has no entry for it", "routed_by_policy": true}, {"reason_code": "settlement_reversed", "signature": "order_000046", "owner": "chargeback_ops", "urgency": "critical", "recommended_action": "Treat as a chargeback. The credit was taken back, so the cash position is overstated until the reversal is booked.", "order_count": 1, "value_at_risk": 13381.5, "material": true, "order_ids": ["order_000046"], "sample_basis": "1 debit(s) totalling 13381.5 quote settlement UTR UTR100046 \u2014 money was credited and then taken back", "routed_by_policy": true}, {"reason_code": "settlement_not_credited", "signature": "all", "owner": "razorpay_support", "urgency": "critical", "recommended_action": "Raise with Razorpay quoting the UTR. A payout was reported and no matching credit exists in the statement.", "order_count": 2, "value_at_risk": 6201.64, "material": true, "order_ids": ["order_000021", "order_000045"], "sample_basis": "settlement UTR UTR100021 has no matching bank credit and no unattributed credit for 2373.24 \u2014 money never arrived", "routed_by_policy": true}, {"reason_code": "fee_footing_mismatch", "signature": "fee_ratio_1.2", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Query the fee schedule. The settlement does not foot against its own gross, fee, tax and refund.", "order_count": 5, "value_at_risk": 88397.13, "material": true, "order_ids": ["order_000003", "order_000015", "order_000027", "order_000039", "order_000051"], "sample_basis": "gross-fee-tax-refund=5827.8 vs actual_settled=5799.12", "routed_by_policy": true}, {"reason_code": "duplicate_settlement", "signature": "all", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Confirm which settlement row is authoritative before booking either, so the order is not recognised twice.", "order_count": 5, "value_at_risk": 75769.24, "material": true, "order_ids": ["order_000001", "order_000013", "order_000025", "order_000037", "order_000049"], "sample_basis": "2 settlement rows found for one order_id", "routed_by_policy": true}, {"reason_code": "refund_not_reflected", "signature": "all", "owner": "merchant_finance", "urgency": "high", "recommended_action": "Post the refund to the ledger. Revenue is overstated by the refunded amount until it is booked.", "order_count": 4, "value_at_risk": 41518.23, "material": true, "order_ids": ["order_000012", "order_000024", "order_000036", "order_000048"], "sample_basis": "settlement nets a refund of 5727.23 but ledger still books 19090.78 with status='paid'", "routed_by_policy": true}, {"reason_code": "no_settlement_found", "signature": "all", "owner": "razorpay_support", "urgency": "medium", "recommended_action": "Check payment status. The order is booked as paid and no settlement exists for it.", "order_count": 5, "value_at_risk": 64511.08, "material": true, "order_ids": ["order_000002", "order_000014", "order_000026", "order_000038", "order_000050"], "sample_basis": "no settlement row exists for this order_id", "routed_by_policy": true}, {"reason_code": "credit_unattributed", "signature": "all", "owner": "merchant_finance", "urgency": "medium", "recommended_action": "Attribute the credit by hand. The money is in the account; only the narration is unreadable.", "order_count": 3, "value_at_risk": 43868.63, "material": true, "order_ids": ["order_000009", "order_000023", "order_000033"], "sample_basis": "settlement UTR UTR100009 has no readable bank credit, but 1 unattributed credit(s) match the expected 17616.68 \u2014 narration unreadable, NOT matched on amount", "routed_by_policy": true}, {"reason_code": "ledger_gross_amount_mismatch", "signature": "order_000020", "owner": "merchant_finance", "urgency": "medium", "recommended_action": "Correct the booked amount, or explain the difference. The ledger and the settlement disagree on the sale value.", "order_count": 1, "value_at_risk": 3474.27, "material": true, "order_ids": ["order_000020"], "sample_basis": "ledger=4308.24 vs settlement_gross=3558.24", "routed_by_policy": true}, {"reason_code": "bank_credit_delayed", "signature": "delay_1w", "owner": "bank_ops", "urgency": "low", "recommended_action": "Monitor. The credit landed outside the normal window but did land; chase only if this recurs for the same account.", "order_count": 5, "value_at_risk": 52592.63, "material": true, "order_ids": ["order_000004", "order_000016", "order_000028", "order_000040", "order_000052"], "sample_basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days", "routed_by_policy": true}, {"reason_code": "bank_amount_mismatch", "signature": "short_by_250.0", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Reconcile the payout against the credit. The bank moved a different amount from the one the settlement reports.", "order_count": 2, "value_at_risk": 3319.26, "material": false, "order_ids": ["order_000008", "order_000032"], "sample_basis": "bank credited 872.99 vs settlement total 1122.99 (single payment settlement)", "routed_by_policy": true}], "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."}, "throughput": {"wall_clock_ms": 4659.82, "orders": 57, "bank_rows": 50, "records_processed": 107, "records_per_second": 23.0, "llm_calls": 3, "llm_calls_per_100_orders": 5.26, "stage_ms": {"load_sources": 1.42, "stage_a_ledger_settlement": 1.91, "tier1_narration_regex": 0.8, "tier2_narration_fuzzy": 0.43, "tier3_narration_llm": 4645.64, "stage_b_settlement_bank": 6.19}}, "bank_source_error": null, "exception_count": 35, "exception_reason_counts": {"no_ledger_entry": 2, "duplicate_settlement": 5, "no_settlement_found": 5, "fee_footing_mismatch": 5, "refund_not_reflected": 4, "ledger_gross_amount_mismatch": 1, "bank_credit_delayed": 5, "bank_amount_mismatch": 2, "credit_unattributed": 3, "settlement_not_credited": 2, "settlement_reversed": 1}, "unattributed_bank_credits": [{"txn_id": "bnk_000028", "amount": 4582.15, "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100033", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}, {"txn_id": "bnk_000020", "amount": 21669.8, "narration": "CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}, {"txn_id": "bnk_000008", "amount": 17616.68, "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100009", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}], "audit_trail": {"intact": true, "entries": 117, "verified": 117, "unverifiable_prefix": 0, "broken_at": null, "reason": "all 117 hashed entries verify against the chain"}, "close_gate": {"can_close": false, "blocker_count": 4, "value_blocking_close": 504718.32, "conditions_checked": 7, "conditions_passed": ["audit_trail_intact", "sources_verifiable", "books_balance"], "blockers": [{"condition": "revenue_recorded", "why": "2 settlement(s) were received for orders the ledger never booked, so revenue for the period is understated.", "action": "Book the missing orders, or explain why the money is not ours.", "value_at_risk": 28876.92, "detail": {"order_count": 2}}, {"condition": "reversals_booked", "why": "1 settlement(s) were credited and then reversed, so the closing cash position is overstated until the reversals are booked.", "action": "Book the chargebacks against the original settlements.", "value_at_risk": 13381.5, "detail": {"order_count": 1}}, {"condition": "cash_attributable", "why": "43,868.63 of bank credits cannot be tied to any settlement, which is above the triage threshold of 3,322.13.", "action": "Attribute the credits by hand, or hold them in suspense and disclose.", "value_at_risk": 43868.63, "detail": {"threshold": 3322.13}}, {"condition": "material_exceptions_resolved", "why": "10 incident(s) above the triage threshold are still open.", "action": "Work the triage queue, or record a documented decision to accept each one.", "value_at_risk": 418591.27, "detail": {"incident_count": 10, "threshold": 3322.13}}], "note": "A close decision, not a close. This records what a controller would need to resolve before signing; it signs nothing."}, "source_dir": "data", "chain_sample": ["4c190c19d5ae95418e82\u2026  \u2190  000000000000\u2026", "16818f7cce386a74ca19\u2026  \u2190  4c190c19d5ae\u2026", "b51dc5d87df4dc383dcd\u2026  \u2190  16818f7cce38\u2026"], "scoring": {"injected_faults": 32, "detected": 32, "missed": 0, "false_positives": 3, "recall": "100.00%  [89.3\u2013100.0]", "accuracy": "94.74%"}}, "realistic": {"total_orders": 2000, "reconciled_orders": 1942, "unreconciled_orders": 58, "match_rate_pct": 97.1, "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank", "stages": {"ledger_settlement": {"matched": 1959, "exceptions": 41}, "settlement_bank": {"matched": 1971, "exceptions": 19}}, "narration_resolution": {"resolved_by_fuzzy_no_llm": 9, "resolved_by_llm": 0, "unresolved": 3}, "money": {"total_exposure": 24715582.01, "confirmed_value": 24055892.51, "at_risk_value": 659689.5, "value_match_rate_pct": 97.33, "at_risk_by_reason": {"no_settlement_found": 132571.03, "duplicate_settlement": 132305.67, "bank_credit_delayed": 109789.44, "fee_footing_mismatch": 100244.88, "refund_not_reflected": 97631.03, "credit_unattributed": 41482.75, "bank_amount_mismatch": 18400.0, "settlement_not_credited": 12325.67, "settlement_reversed": 11464.76, "ledger_gross_amount_mismatch": 3474.27}, "unattributed_bank_credit_value": 41482.75, "identity": {"holds": true, "residual": 0.0, "statement": "total_exposure == confirmed_value + at_risk_value"}, "exposure_note": "exposure = settled_amount where a settlement exists, else the ledger amount (booked revenue with no payout)"}, "triage": {"exception_rows": 58, "incident_count": 10, "material_incident_count": 2, "materiality_threshold": 123577.91, "materiality_basis": "0.5% of this run's exposure, floored at 1,000.00. Operational triage heuristic, not audit materiality under SA 320 / ISA 320.", "value_above_threshold": 264876.7, "value_below_threshold": 394812.8, "by_owner": {"razorpay_support": {"incidents": 5, "orders": 35, "value_at_risk": 395847.25}, "merchant_finance": {"incidents": 3, "orders": 13, "value_at_risk": 142588.05}, "bank_ops": {"incidents": 1, "orders": 9, "value_at_risk": 109789.44}, "chargeback_ops": {"incidents": 1, "orders": 1, "value_at_risk": 11464.76}}, "incidents": [{"reason_code": "duplicate_settlement", "signature": "all", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Confirm which settlement row is authoritative before booking either, so the order is not recognised twice.", "order_count": 12, "value_at_risk": 132305.67, "material": true, "order_ids": ["order_000001", "order_000223", "order_000445", "order_000667", "order_000889", "order_000901", "order_000902", "order_001111", "order_001333", "order_001555", "order_001777", "order_001999"], "sample_basis": "2 settlement rows found for one order_id", "routed_by_policy": true}, {"reason_code": "no_settlement_found", "signature": "all", "owner": "razorpay_support", "urgency": "medium", "recommended_action": "Check payment status. The order is booked as paid and no settlement exists for it.", "order_count": 10, "value_at_risk": 132571.03, "material": true, "order_ids": ["order_000002", "order_000224", "order_000446", "order_000668", "order_000890", "order_001112", "order_001334", "order_001556", "order_001778", "order_002000"], "sample_basis": "no settlement row exists for this order_id", "routed_by_policy": true}, {"reason_code": "settlement_not_credited", "signature": "all", "owner": "razorpay_support", "urgency": "critical", "recommended_action": "Raise with Razorpay quoting the UTR. A payout was reported and no matching credit exists in the statement.", "order_count": 2, "value_at_risk": 12325.67, "material": false, "order_ids": ["order_000021", "order_000045"], "sample_basis": "settlement UTR UTR100021 has no matching bank credit and no unattributed credit for 2373.24 \u2014 money never arrived", "routed_by_policy": true}, {"reason_code": "settlement_reversed", "signature": "order_000046", "owner": "chargeback_ops", "urgency": "critical", "recommended_action": "Treat as a chargeback. The credit was taken back, so the cash position is overstated until the reversal is booked.", "order_count": 1, "value_at_risk": 11464.76, "material": false, "order_ids": ["order_000046"], "sample_basis": "1 debit(s) totalling 11464.76 quote settlement UTR UTR100046 \u2014 money was credited and then taken back", "routed_by_policy": true}, {"reason_code": "fee_footing_mismatch", "signature": "fee_ratio_1.2", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Query the fee schedule. The settlement does not foot against its own gross, fee, tax and refund.", "order_count": 9, "value_at_risk": 100244.88, "material": false, "order_ids": ["order_000003", "order_000225", "order_000447", "order_000669", "order_000891", "order_001113", "order_001335", "order_001557", "order_001779"], "sample_basis": "gross-fee-tax-refund=5827.8 vs actual_settled=5799.12", "routed_by_policy": true}, {"reason_code": "refund_not_reflected", "signature": "all", "owner": "merchant_finance", "urgency": "high", "recommended_action": "Post the refund to the ledger. Revenue is overstated by the refunded amount until it is booked.", "order_count": 9, "value_at_risk": 97631.03, "material": false, "order_ids": ["order_000222", "order_000444", "order_000666", "order_000888", "order_001110", "order_001332", "order_001554", "order_001776", "order_001998"], "sample_basis": "settlement nets a refund of 4608.96 but ledger still books 15363.21 with status='paid'", "routed_by_policy": true}, {"reason_code": "bank_amount_mismatch", "signature": "short_by_250.0", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Reconcile the payout against the credit. The bank moved a different amount from the one the settlement reports.", "order_count": 2, "value_at_risk": 18400.0, "material": false, "order_ids": ["order_000008", "order_000032"], "sample_basis": "bank credited 872.99 vs settlement total 1122.99 (single payment settlement)", "routed_by_policy": true}, {"reason_code": "credit_unattributed", "signature": "all", "owner": "merchant_finance", "urgency": "medium", "recommended_action": "Attribute the credit by hand. The money is in the account; only the narration is unreadable.", "order_count": 3, "value_at_risk": 41482.75, "material": false, "order_ids": ["order_000009", "order_000023", "order_000033"], "sample_basis": "settlement UTR UTR100009 has no readable bank credit, but 1 unattributed credit(s) match the expected 17616.68 \u2014 narration unreadable, NOT matched on amount", "routed_by_policy": true}, {"reason_code": "ledger_gross_amount_mismatch", "signature": "order_000020", "owner": "merchant_finance", "urgency": "medium", "recommended_action": "Correct the booked amount, or explain the difference. The ledger and the settlement disagree on the sale value.", "order_count": 1, "value_at_risk": 3474.27, "material": false, "order_ids": ["order_000020"], "sample_basis": "ledger=4308.24 vs settlement_gross=3558.24", "routed_by_policy": true}, {"reason_code": "bank_credit_delayed", "signature": "delay_1w", "owner": "bank_ops", "urgency": "low", "recommended_action": "Monitor. The credit landed outside the normal window but did land; chase only if this recurs for the same account.", "order_count": 9, "value_at_risk": 109789.44, "material": false, "order_ids": ["order_000004", "order_000226", "order_000448", "order_000670", "order_000892", "order_001114", "order_001336", "order_001558", "order_001780"], "sample_basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days", "routed_by_policy": true}], "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."}, "throughput": {"wall_clock_ms": 4197.77, "orders": 2000, "bank_rows": 1988, "records_processed": 3988, "records_per_second": 950.0, "llm_calls": 3, "llm_calls_per_100_orders": 0.15, "stage_ms": {"load_sources": 8.47, "stage_a_ledger_settlement": 65.58, "tier1_narration_regex": 33.21, "tier2_narration_fuzzy": 11.84, "tier3_narration_llm": 3891.69, "stage_b_settlement_bank": 121.8}}, "bank_source_error": null, "exception_count": 60, "exception_reason_counts": {"duplicate_settlement": 12, "no_settlement_found": 10, "fee_footing_mismatch": 9, "ledger_gross_amount_mismatch": 1, "refund_not_reflected": 9, "bank_amount_mismatch": 4, "bank_credit_delayed": 9, "credit_unattributed": 3, "settlement_not_credited": 2, "settlement_reversed": 1}, "unattributed_bank_credits": [{"txn_id": "bnk_000021", "amount": 21669.8, "narration": "CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}, {"txn_id": "bnk_000008", "amount": 17616.68, "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100009", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}, {"txn_id": "bnk_000030", "amount": 2196.27, "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100033", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}], "audit_trail": {"intact": true, "entries": 4002, "verified": 4002, "unverifiable_prefix": 0, "broken_at": null, "reason": "all 4002 hashed entries verify against the chain"}, "close_gate": {"can_close": false, "blocker_count": 2, "value_blocking_close": 276341.46, "conditions_checked": 7, "conditions_passed": ["audit_trail_intact", "sources_verifiable", "books_balance", "revenue_recorded", "cash_attributable"], "blockers": [{"condition": "reversals_booked", "why": "1 settlement(s) were credited and then reversed, so the closing cash position is overstated until the reversals are booked.", "action": "Book the chargebacks against the original settlements.", "value_at_risk": 11464.76, "detail": {"order_count": 1}}, {"condition": "material_exceptions_resolved", "why": "2 incident(s) above the triage threshold are still open.", "action": "Work the triage queue, or record a documented decision to accept each one.", "value_at_risk": 264876.7, "detail": {"incident_count": 2, "threshold": 123577.91}}], "note": "A close decision, not a close. This records what a controller would need to resolve before signing; it signs nothing."}, "source_dir": "data/realistic", "chain_sample": ["dfad5955b68543aa6cbf\u2026  \u2190  000000000000\u2026", "d7acd06384c39574f0b5\u2026  \u2190  dfad5955b685\u2026", "2f2a729a5e49972e9dde\u2026  \u2190  d7acd06384c3\u2026"], "scoring": {"injected_faults": 55, "detected": 55, "missed": 0, "false_positives": 3, "recall": "100.00%  [93.5\u2013100.0]", "accuracy": "99.75%"}}, "stress": {"total_orders": 5000, "reconciled_orders": 2903, "unreconciled_orders": 2097, "match_rate_pct": 58.06, "match_rate_definition": "orders confirmed on both legs: ledger<->settlement AND settlement<->bank", "stages": {"ledger_settlement": {"matched": 3332, "exceptions": 1668}, "settlement_bank": {"matched": 4154, "exceptions": 430}}, "narration_resolution": {"resolved_by_fuzzy_no_llm": 417, "resolved_by_llm": 0, "unresolved": 3}, "money": {"total_exposure": 60852521.71, "confirmed_value": 36257354.41, "at_risk_value": 24595167.3, "value_match_rate_pct": 59.58, "at_risk_by_reason": {"bank_credit_delayed": 5357491.97, "fee_footing_mismatch": 5248583.15, "no_settlement_found": 5216047.21, "duplicate_settlement": 5044065.39, "refund_not_reflected": 3598950.1, "attribution_ambiguous": 48985.58, "credit_unattributed": 43868.63, "ledger_gross_amount_mismatch": 14272.87, "settlement_reversed": 13381.5, "settlement_not_credited": 6201.64, "bank_amount_mismatch": 3319.26}, "unattributed_bank_credit_value": 43868.63, "identity": {"holds": true, "residual": 0.0, "statement": "total_exposure == confirmed_value + at_risk_value"}, "exposure_note": "exposure = settled_amount where a settlement exists, else the ledger amount (booked revenue with no payout)"}, "triage": {"exception_rows": 2097, "incident_count": 15, "material_incident_count": 5, "materiality_threshold": 304262.61, "materiality_basis": "0.5% of this run's exposure, floored at 1,000.00. Operational triage heuristic, not audit materiality under SA 320 / ISA 320.", "value_above_threshold": 24465137.82, "value_below_threshold": 130029.48, "by_owner": {"razorpay_support": {"incidents": 5, "orders": 1254, "value_at_risk": 15518216.65}, "bank_ops": {"incidents": 1, "orders": 417, "value_at_risk": 5357491.97}, "merchant_finance": {"incidents": 8, "orders": 425, "value_at_risk": 3706077.18}, "chargeback_ops": {"incidents": 1, "orders": 1, "value_at_risk": 13381.5}}, "incidents": [{"reason_code": "fee_footing_mismatch", "signature": "fee_ratio_1.2", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Query the fee schedule. The settlement does not foot against its own gross, fee, tax and refund.", "order_count": 417, "value_at_risk": 5248583.15, "material": true, "order_ids": ["order_000003", "order_000015", "order_000027", "order_000039", "order_000051", "order_000063", "order_000075", "order_000087", "order_000099", "order_000111", "order_000123", "order_000135", "order_000147", "order_000159", "order_000171", "order_000183", "order_000195", "order_000207", "order_000219", "order_000231", "order_000243", "order_000255", "order_000267", "order_000279", "order_000291", "order_000303", "order_000315", "order_000327", "order_000339", "order_000351", "order_000363", "order_000375", "order_000387", "order_000399", "order_000411", "order_000423", "order_000435", "order_000447", "order_000459", "order_000471", "order_000483", "order_000495", "order_000507", "order_000519", "order_000531", "order_000543", "order_000555", "order_000567", "order_000579", "order_000591", "order_000603", "order_000615", "order_000627", "order_000639", "order_000651", "order_000663", "order_000675", "order_000687", "order_000699", "order_000711", "order_000723", "order_000735", "order_000747", "order_000759", "order_000771", "order_000783", "order_000795", "order_000807", "order_000819", "order_000831", "order_000843", "order_000855", "order_000867", "order_000879", "order_000891", "order_000903", "order_000915", "order_000927", "order_000939", "order_000951", "order_000963", "order_000975", "order_000987", "order_000999", "order_001011", "order_001023", "order_001035", "order_001047", "order_001059", "order_001071", "order_001083", "order_001095", "order_001107", "order_001119", "order_001131", "order_001143", "order_001155", "order_001167", "order_001179", "order_001191", "order_001203", "order_001215", "order_001227", "order_001239", "order_001251", "order_001263", "order_001275", "order_001287", "order_001299", "order_001311", "order_001323", "order_001335", "order_001347", "order_001359", "order_001371", "order_001383", "order_001395", "order_001407", "order_001419", "order_001431", "order_001443", "order_001455", "order_001467", "order_001479", "order_001491", "order_001503", "order_001515", "order_001527", "order_001539", "order_001551", "order_001563", "order_001575", "order_001587", "order_001599", "order_001611", "order_001623", "order_001635", "order_001647", "order_001659", "order_001671", "order_001683", "order_001695", "order_001707", "order_001719", "order_001731", "order_001743", "order_001755", "order_001767", "order_001779", "order_001791", "order_001803", "order_001815", "order_001827", "order_001839", "order_001851", "order_001863", "order_001875", "order_001887", "order_001899", "order_001911", "order_001923", "order_001935", "order_001947", "order_001959", "order_001971", "order_001983", "order_001995", "order_002007", "order_002019", "order_002031", "order_002043", "order_002055", "order_002067", "order_002079", "order_002091", "order_002103", "order_002115", "order_002127", "order_002139", "order_002151", "order_002163", "order_002175", "order_002187", "order_002199", "order_002211", "order_002223", "order_002235", "order_002247", "order_002259", "order_002271", "order_002283", "order_002295", "order_002307", "order_002319", "order_002331", "order_002343", "order_002355", "order_002367", "order_002379", "order_002391", "order_002403", "order_002415", "order_002427", "order_002439", "order_002451", "order_002463", "order_002475", "order_002487", "order_002499", "order_002511", "order_002523", "order_002535", "order_002547", "order_002559", "order_002571", "order_002583", "order_002595", "order_002607", "order_002619", "order_002631", "order_002643", "order_002655", "order_002667", "order_002679", "order_002691", "order_002703", "order_002715", "order_002727", "order_002739", "order_002751", "order_002763", "order_002775", "order_002787", "order_002799", "order_002811", "order_002823", "order_002835", "order_002847", "order_002859", "order_002871", "order_002883", "order_002895", "order_002907", "order_002919", "order_002931", "order_002943", "order_002955", "order_002967", "order_002979", "order_002991", "order_003003", "order_003015", "order_003027", "order_003039", "order_003051", "order_003063", "order_003075", "order_003087", "order_003099", "order_003111", "order_003123", "order_003135", "order_003147", "order_003159", "order_003171", "order_003183", "order_003195", "order_003207", "order_003219", "order_003231", "order_003243", "order_003255", "order_003267", "order_003279", "order_003291", "order_003303", "order_003315", "order_003327", "order_003339", "order_003351", "order_003363", "order_003375", "order_003387", "order_003399", "order_003411", "order_003423", "order_003435", "order_003447", "order_003459", "order_003471", "order_003483", "order_003495", "order_003507", "order_003519", "order_003531", "order_003543", "order_003555", "order_003567", "order_003579", "order_003591", "order_003603", "order_003615", "order_003627", "order_003639", "order_003651", "order_003663", "order_003675", "order_003687", "order_003699", "order_003711", "order_003723", "order_003735", "order_003747", "order_003759", "order_003771", "order_003783", "order_003795", "order_003807", "order_003819", "order_003831", "order_003843", "order_003855", "order_003867", "order_003879", "order_003891", "order_003903", "order_003915", "order_003927", "order_003939", "order_003951", "order_003963", "order_003975", "order_003987", "order_003999", "order_004011", "order_004023", "order_004035", "order_004047", "order_004059", "order_004071", "order_004083", "order_004095", "order_004107", "order_004119", "order_004131", "order_004143", "order_004155", "order_004167", "order_004179", "order_004191", "order_004203", "order_004215", "order_004227", "order_004239", "order_004251", "order_004263", "order_004275", "order_004287", "order_004299", "order_004311", "order_004323", "order_004335", "order_004347", "order_004359", "order_004371", "order_004383", "order_004395", "order_004407", "order_004419", "order_004431", "order_004443", "order_004455", "order_004467", "order_004479", "order_004491", "order_004503", "order_004515", "order_004527", "order_004539", "order_004551", "order_004563", "order_004575", "order_004587", "order_004599", "order_004611", "order_004623", "order_004635", "order_004647", "order_004659", "order_004671", "order_004683", "order_004695", "order_004707", "order_004719", "order_004731", "order_004743", "order_004755", "order_004767", "order_004779", "order_004791", "order_004803", "order_004815", "order_004827", "order_004839", "order_004851", "order_004863", "order_004875", "order_004887", "order_004899", "order_004911", "order_004923", "order_004935", "order_004947", "order_004959", "order_004971", "order_004983", "order_004995"], "sample_basis": "gross-fee-tax-refund=5827.8 vs actual_settled=5799.12", "routed_by_policy": true}, {"reason_code": "duplicate_settlement", "signature": "all", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Confirm which settlement row is authoritative before booking either, so the order is not recognised twice.", "order_count": 417, "value_at_risk": 5044065.39, "material": true, "order_ids": ["order_000001", "order_000013", "order_000025", "order_000037", "order_000049", "order_000061", "order_000073", "order_000085", "order_000097", "order_000109", "order_000121", "order_000133", "order_000145", "order_000157", "order_000169", "order_000181", "order_000193", "order_000205", "order_000217", "order_000229", "order_000241", "order_000253", "order_000265", "order_000277", "order_000289", "order_000301", "order_000313", "order_000325", "order_000337", "order_000349", "order_000361", "order_000373", "order_000385", "order_000397", "order_000409", "order_000421", "order_000433", "order_000445", "order_000457", "order_000469", "order_000481", "order_000493", "order_000505", "order_000517", "order_000529", "order_000541", "order_000553", "order_000565", "order_000577", "order_000589", "order_000601", "order_000613", "order_000625", "order_000637", "order_000649", "order_000661", "order_000673", "order_000685", "order_000697", "order_000709", "order_000721", "order_000733", "order_000745", "order_000757", "order_000769", "order_000781", "order_000793", "order_000805", "order_000817", "order_000829", "order_000841", "order_000853", "order_000865", "order_000877", "order_000889", "order_000901", "order_000913", "order_000925", "order_000937", "order_000949", "order_000961", "order_000973", "order_000985", "order_000997", "order_001009", "order_001021", "order_001033", "order_001045", "order_001057", "order_001069", "order_001081", "order_001093", "order_001105", "order_001117", "order_001129", "order_001141", "order_001153", "order_001165", "order_001177", "order_001189", "order_001201", "order_001213", "order_001225", "order_001237", "order_001249", "order_001261", "order_001273", "order_001285", "order_001297", "order_001309", "order_001321", "order_001333", "order_001345", "order_001357", "order_001369", "order_001381", "order_001393", "order_001405", "order_001417", "order_001429", "order_001441", "order_001453", "order_001465", "order_001477", "order_001489", "order_001501", "order_001513", "order_001525", "order_001537", "order_001549", "order_001561", "order_001573", "order_001585", "order_001597", "order_001609", "order_001621", "order_001633", "order_001645", "order_001657", "order_001669", "order_001681", "order_001693", "order_001705", "order_001717", "order_001729", "order_001741", "order_001753", "order_001765", "order_001777", "order_001789", "order_001801", "order_001813", "order_001825", "order_001837", "order_001849", "order_001861", "order_001873", "order_001885", "order_001897", "order_001909", "order_001921", "order_001933", "order_001945", "order_001957", "order_001969", "order_001981", "order_001993", "order_002005", "order_002017", "order_002029", "order_002041", "order_002053", "order_002065", "order_002077", "order_002089", "order_002101", "order_002113", "order_002125", "order_002137", "order_002149", "order_002161", "order_002173", "order_002185", "order_002197", "order_002209", "order_002221", "order_002233", "order_002245", "order_002257", "order_002269", "order_002281", "order_002293", "order_002305", "order_002317", "order_002329", "order_002341", "order_002353", "order_002365", "order_002377", "order_002389", "order_002401", "order_002413", "order_002425", "order_002437", "order_002449", "order_002461", "order_002473", "order_002485", "order_002497", "order_002509", "order_002521", "order_002533", "order_002545", "order_002557", "order_002569", "order_002581", "order_002593", "order_002605", "order_002617", "order_002629", "order_002641", "order_002653", "order_002665", "order_002677", "order_002689", "order_002701", "order_002713", "order_002725", "order_002737", "order_002749", "order_002761", "order_002773", "order_002785", "order_002797", "order_002809", "order_002821", "order_002833", "order_002845", "order_002857", "order_002869", "order_002881", "order_002893", "order_002905", "order_002917", "order_002929", "order_002941", "order_002953", "order_002965", "order_002977", "order_002989", "order_003001", "order_003013", "order_003025", "order_003037", "order_003049", "order_003061", "order_003073", "order_003085", "order_003097", "order_003109", "order_003121", "order_003133", "order_003145", "order_003157", "order_003169", "order_003181", "order_003193", "order_003205", "order_003217", "order_003229", "order_003241", "order_003253", "order_003265", "order_003277", "order_003289", "order_003301", "order_003313", "order_003325", "order_003337", "order_003349", "order_003361", "order_003373", "order_003385", "order_003397", "order_003409", "order_003421", "order_003433", "order_003445", "order_003457", "order_003469", "order_003481", "order_003493", "order_003505", "order_003517", "order_003529", "order_003541", "order_003553", "order_003565", "order_003577", "order_003589", "order_003601", "order_003613", "order_003625", "order_003637", "order_003649", "order_003661", "order_003673", "order_003685", "order_003697", "order_003709", "order_003721", "order_003733", "order_003745", "order_003757", "order_003769", "order_003781", "order_003793", "order_003805", "order_003817", "order_003829", "order_003841", "order_003853", "order_003865", "order_003877", "order_003889", "order_003901", "order_003913", "order_003925", "order_003937", "order_003949", "order_003961", "order_003973", "order_003985", "order_003997", "order_004009", "order_004021", "order_004033", "order_004045", "order_004057", "order_004069", "order_004081", "order_004093", "order_004105", "order_004117", "order_004129", "order_004141", "order_004153", "order_004165", "order_004177", "order_004189", "order_004201", "order_004213", "order_004225", "order_004237", "order_004249", "order_004261", "order_004273", "order_004285", "order_004297", "order_004309", "order_004321", "order_004333", "order_004345", "order_004357", "order_004369", "order_004381", "order_004393", "order_004405", "order_004417", "order_004429", "order_004441", "order_004453", "order_004465", "order_004477", "order_004489", "order_004501", "order_004513", "order_004525", "order_004537", "order_004549", "order_004561", "order_004573", "order_004585", "order_004597", "order_004609", "order_004621", "order_004633", "order_004645", "order_004657", "order_004669", "order_004681", "order_004693", "order_004705", "order_004717", "order_004729", "order_004741", "order_004753", "order_004765", "order_004777", "order_004789", "order_004801", "order_004813", "order_004825", "order_004837", "order_004849", "order_004861", "order_004873", "order_004885", "order_004897", "order_004909", "order_004921", "order_004933", "order_004945", "order_004957", "order_004969", "order_004981", "order_004993"], "sample_basis": "2 settlement rows found for one order_id", "routed_by_policy": true}, {"reason_code": "refund_not_reflected", "signature": "all", "owner": "merchant_finance", "urgency": "high", "recommended_action": "Post the refund to the ledger. Revenue is overstated by the refunded amount until it is booked.", "order_count": 416, "value_at_risk": 3598950.1, "material": true, "order_ids": ["order_000012", "order_000024", "order_000036", "order_000048", "order_000060", "order_000072", "order_000084", "order_000096", "order_000108", "order_000120", "order_000132", "order_000144", "order_000156", "order_000168", "order_000180", "order_000192", "order_000204", "order_000216", "order_000228", "order_000240", "order_000252", "order_000264", "order_000276", "order_000288", "order_000300", "order_000312", "order_000324", "order_000336", "order_000348", "order_000360", "order_000372", "order_000384", "order_000396", "order_000408", "order_000420", "order_000432", "order_000444", "order_000456", "order_000468", "order_000480", "order_000492", "order_000504", "order_000516", "order_000528", "order_000540", "order_000552", "order_000564", "order_000576", "order_000588", "order_000600", "order_000612", "order_000624", "order_000636", "order_000648", "order_000660", "order_000672", "order_000684", "order_000696", "order_000708", "order_000720", "order_000732", "order_000744", "order_000756", "order_000768", "order_000780", "order_000792", "order_000804", "order_000816", "order_000828", "order_000840", "order_000852", "order_000864", "order_000876", "order_000888", "order_000900", "order_000912", "order_000924", "order_000936", "order_000948", "order_000960", "order_000972", "order_000984", "order_000996", "order_001008", "order_001020", "order_001032", "order_001044", "order_001056", "order_001068", "order_001080", "order_001092", "order_001104", "order_001116", "order_001128", "order_001140", "order_001152", "order_001164", "order_001176", "order_001188", "order_001200", "order_001212", "order_001224", "order_001236", "order_001248", "order_001260", "order_001272", "order_001284", "order_001296", "order_001308", "order_001320", "order_001332", "order_001344", "order_001356", "order_001368", "order_001380", "order_001392", "order_001404", "order_001416", "order_001428", "order_001440", "order_001452", "order_001464", "order_001476", "order_001488", "order_001500", "order_001512", "order_001524", "order_001536", "order_001548", "order_001560", "order_001572", "order_001584", "order_001596", "order_001608", "order_001620", "order_001632", "order_001644", "order_001656", "order_001668", "order_001680", "order_001692", "order_001704", "order_001716", "order_001728", "order_001740", "order_001752", "order_001764", "order_001776", "order_001788", "order_001800", "order_001812", "order_001824", "order_001836", "order_001848", "order_001860", "order_001872", "order_001884", "order_001896", "order_001908", "order_001920", "order_001932", "order_001944", "order_001956", "order_001968", "order_001980", "order_001992", "order_002004", "order_002016", "order_002028", "order_002040", "order_002052", "order_002064", "order_002076", "order_002088", "order_002100", "order_002112", "order_002124", "order_002136", "order_002148", "order_002160", "order_002172", "order_002184", "order_002196", "order_002208", "order_002220", "order_002232", "order_002244", "order_002256", "order_002268", "order_002280", "order_002292", "order_002304", "order_002316", "order_002328", "order_002340", "order_002352", "order_002364", "order_002376", "order_002388", "order_002400", "order_002412", "order_002424", "order_002436", "order_002448", "order_002460", "order_002472", "order_002484", "order_002496", "order_002508", "order_002520", "order_002532", "order_002544", "order_002556", "order_002568", "order_002580", "order_002592", "order_002604", "order_002616", "order_002628", "order_002640", "order_002652", "order_002664", "order_002676", "order_002688", "order_002700", "order_002712", "order_002724", "order_002736", "order_002748", "order_002760", "order_002772", "order_002784", "order_002796", "order_002808", "order_002820", "order_002832", "order_002844", "order_002856", "order_002868", "order_002880", "order_002892", "order_002904", "order_002916", "order_002928", "order_002940", "order_002952", "order_002964", "order_002976", "order_002988", "order_003000", "order_003012", "order_003024", "order_003036", "order_003048", "order_003060", "order_003072", "order_003084", "order_003096", "order_003108", "order_003120", "order_003132", "order_003144", "order_003156", "order_003168", "order_003180", "order_003192", "order_003204", "order_003216", "order_003228", "order_003240", "order_003252", "order_003264", "order_003276", "order_003288", "order_003300", "order_003312", "order_003324", "order_003336", "order_003348", "order_003360", "order_003372", "order_003384", "order_003396", "order_003408", "order_003420", "order_003432", "order_003444", "order_003456", "order_003468", "order_003480", "order_003492", "order_003504", "order_003516", "order_003528", "order_003540", "order_003552", "order_003564", "order_003576", "order_003588", "order_003600", "order_003612", "order_003624", "order_003636", "order_003648", "order_003660", "order_003672", "order_003684", "order_003696", "order_003708", "order_003720", "order_003732", "order_003744", "order_003756", "order_003768", "order_003780", "order_003792", "order_003804", "order_003816", "order_003828", "order_003840", "order_003852", "order_003864", "order_003876", "order_003888", "order_003900", "order_003912", "order_003924", "order_003936", "order_003948", "order_003960", "order_003972", "order_003984", "order_003996", "order_004008", "order_004020", "order_004032", "order_004044", "order_004056", "order_004068", "order_004080", "order_004092", "order_004104", "order_004116", "order_004128", "order_004140", "order_004152", "order_004164", "order_004176", "order_004188", "order_004200", "order_004212", "order_004224", "order_004236", "order_004248", "order_004260", "order_004272", "order_004284", "order_004296", "order_004308", "order_004320", "order_004332", "order_004344", "order_004356", "order_004368", "order_004380", "order_004392", "order_004404", "order_004416", "order_004428", "order_004440", "order_004452", "order_004464", "order_004476", "order_004488", "order_004500", "order_004512", "order_004524", "order_004536", "order_004548", "order_004560", "order_004572", "order_004584", "order_004596", "order_004608", "order_004620", "order_004632", "order_004644", "order_004656", "order_004668", "order_004680", "order_004692", "order_004704", "order_004716", "order_004728", "order_004740", "order_004752", "order_004764", "order_004776", "order_004788", "order_004800", "order_004812", "order_004824", "order_004836", "order_004848", "order_004860", "order_004872", "order_004884", "order_004896", "order_004908", "order_004920", "order_004932", "order_004944", "order_004956", "order_004968", "order_004980", "order_004992"], "sample_basis": "settlement nets a refund of 5727.23 but ledger still books 19090.78 with status='paid'", "routed_by_policy": true}, {"reason_code": "no_settlement_found", "signature": "all", "owner": "razorpay_support", "urgency": "medium", "recommended_action": "Check payment status. The order is booked as paid and no settlement exists for it.", "order_count": 416, "value_at_risk": 5216047.21, "material": true, "order_ids": ["order_000002", "order_000014", "order_000026", "order_000038", "order_000050", "order_000062", "order_000074", "order_000086", "order_000098", "order_000110", "order_000122", "order_000134", "order_000146", "order_000158", "order_000170", "order_000182", "order_000194", "order_000206", "order_000218", "order_000230", "order_000242", "order_000254", "order_000266", "order_000278", "order_000290", "order_000302", "order_000314", "order_000326", "order_000338", "order_000350", "order_000362", "order_000374", "order_000386", "order_000398", "order_000410", "order_000422", "order_000434", "order_000446", "order_000458", "order_000470", "order_000482", "order_000494", "order_000506", "order_000518", "order_000530", "order_000542", "order_000554", "order_000566", "order_000578", "order_000590", "order_000602", "order_000614", "order_000626", "order_000638", "order_000650", "order_000662", "order_000674", "order_000686", "order_000698", "order_000710", "order_000722", "order_000734", "order_000746", "order_000758", "order_000770", "order_000782", "order_000794", "order_000806", "order_000818", "order_000830", "order_000842", "order_000854", "order_000866", "order_000878", "order_000890", "order_000914", "order_000926", "order_000938", "order_000950", "order_000962", "order_000974", "order_000986", "order_000998", "order_001010", "order_001022", "order_001034", "order_001046", "order_001058", "order_001070", "order_001082", "order_001094", "order_001106", "order_001118", "order_001130", "order_001142", "order_001154", "order_001166", "order_001178", "order_001190", "order_001202", "order_001214", "order_001226", "order_001238", "order_001250", "order_001262", "order_001274", "order_001286", "order_001298", "order_001310", "order_001322", "order_001334", "order_001346", "order_001358", "order_001370", "order_001382", "order_001394", "order_001406", "order_001418", "order_001430", "order_001442", "order_001454", "order_001466", "order_001478", "order_001490", "order_001502", "order_001514", "order_001526", "order_001538", "order_001550", "order_001562", "order_001574", "order_001586", "order_001598", "order_001610", "order_001622", "order_001634", "order_001646", "order_001658", "order_001670", "order_001682", "order_001694", "order_001706", "order_001718", "order_001730", "order_001742", "order_001754", "order_001766", "order_001778", "order_001790", "order_001802", "order_001814", "order_001826", "order_001838", "order_001850", "order_001862", "order_001874", "order_001886", "order_001898", "order_001910", "order_001922", "order_001934", "order_001946", "order_001958", "order_001970", "order_001982", "order_001994", "order_002006", "order_002018", "order_002030", "order_002042", "order_002054", "order_002066", "order_002078", "order_002090", "order_002102", "order_002114", "order_002126", "order_002138", "order_002150", "order_002162", "order_002174", "order_002186", "order_002198", "order_002210", "order_002222", "order_002234", "order_002246", "order_002258", "order_002270", "order_002282", "order_002294", "order_002306", "order_002318", "order_002330", "order_002342", "order_002354", "order_002366", "order_002378", "order_002390", "order_002402", "order_002414", "order_002426", "order_002438", "order_002450", "order_002462", "order_002474", "order_002486", "order_002498", "order_002510", "order_002522", "order_002534", "order_002546", "order_002558", "order_002570", "order_002582", "order_002594", "order_002606", "order_002618", "order_002630", "order_002642", "order_002654", "order_002666", "order_002678", "order_002690", "order_002702", "order_002714", "order_002726", "order_002738", "order_002750", "order_002762", "order_002774", "order_002786", "order_002798", "order_002810", "order_002822", "order_002834", "order_002846", "order_002858", "order_002870", "order_002882", "order_002894", "order_002906", "order_002918", "order_002930", "order_002942", "order_002954", "order_002966", "order_002978", "order_002990", "order_003002", "order_003014", "order_003026", "order_003038", "order_003050", "order_003062", "order_003074", "order_003086", "order_003098", "order_003110", "order_003122", "order_003134", "order_003146", "order_003158", "order_003170", "order_003182", "order_003194", "order_003206", "order_003218", "order_003230", "order_003242", "order_003254", "order_003266", "order_003278", "order_003290", "order_003302", "order_003314", "order_003326", "order_003338", "order_003350", "order_003362", "order_003374", "order_003386", "order_003398", "order_003410", "order_003422", "order_003434", "order_003446", "order_003458", "order_003470", "order_003482", "order_003494", "order_003506", "order_003518", "order_003530", "order_003542", "order_003554", "order_003566", "order_003578", "order_003590", "order_003602", "order_003614", "order_003626", "order_003638", "order_003650", "order_003662", "order_003674", "order_003686", "order_003698", "order_003710", "order_003722", "order_003734", "order_003746", "order_003758", "order_003770", "order_003782", "order_003794", "order_003806", "order_003818", "order_003830", "order_003842", "order_003854", "order_003866", "order_003878", "order_003890", "order_003902", "order_003914", "order_003926", "order_003938", "order_003950", "order_003962", "order_003974", "order_003986", "order_003998", "order_004010", "order_004022", "order_004034", "order_004046", "order_004058", "order_004070", "order_004082", "order_004094", "order_004106", "order_004118", "order_004130", "order_004142", "order_004154", "order_004166", "order_004178", "order_004190", "order_004202", "order_004214", "order_004226", "order_004238", "order_004250", "order_004262", "order_004274", "order_004286", "order_004298", "order_004310", "order_004322", "order_004334", "order_004346", "order_004358", "order_004370", "order_004382", "order_004394", "order_004406", "order_004418", "order_004430", "order_004442", "order_004454", "order_004466", "order_004478", "order_004490", "order_004502", "order_004514", "order_004526", "order_004538", "order_004550", "order_004562", "order_004574", "order_004586", "order_004598", "order_004610", "order_004622", "order_004634", "order_004646", "order_004658", "order_004670", "order_004682", "order_004694", "order_004706", "order_004718", "order_004730", "order_004742", "order_004754", "order_004766", "order_004778", "order_004790", "order_004802", "order_004814", "order_004826", "order_004838", "order_004850", "order_004862", "order_004874", "order_004886", "order_004898", "order_004910", "order_004922", "order_004934", "order_004946", "order_004958", "order_004970", "order_004982", "order_004994"], "sample_basis": "no settlement row exists for this order_id", "routed_by_policy": true}, {"reason_code": "bank_credit_delayed", "signature": "delay_1w", "owner": "bank_ops", "urgency": "low", "recommended_action": "Monitor. The credit landed outside the normal window but did land; chase only if this recurs for the same account.", "order_count": 417, "value_at_risk": 5357491.97, "material": true, "order_ids": ["order_000004", "order_000016", "order_000028", "order_000040", "order_000052", "order_000064", "order_000076", "order_000088", "order_000100", "order_000112", "order_000124", "order_000136", "order_000148", "order_000160", "order_000172", "order_000184", "order_000196", "order_000208", "order_000220", "order_000232", "order_000244", "order_000256", "order_000268", "order_000280", "order_000292", "order_000304", "order_000316", "order_000328", "order_000340", "order_000352", "order_000364", "order_000376", "order_000388", "order_000400", "order_000412", "order_000424", "order_000436", "order_000448", "order_000460", "order_000472", "order_000484", "order_000496", "order_000508", "order_000520", "order_000532", "order_000544", "order_000556", "order_000568", "order_000580", "order_000592", "order_000604", "order_000616", "order_000628", "order_000640", "order_000652", "order_000664", "order_000676", "order_000688", "order_000700", "order_000712", "order_000724", "order_000736", "order_000748", "order_000760", "order_000772", "order_000784", "order_000796", "order_000808", "order_000820", "order_000832", "order_000844", "order_000856", "order_000868", "order_000880", "order_000892", "order_000904", "order_000916", "order_000928", "order_000940", "order_000952", "order_000964", "order_000976", "order_000988", "order_001000", "order_001012", "order_001024", "order_001036", "order_001048", "order_001060", "order_001072", "order_001084", "order_001096", "order_001108", "order_001120", "order_001132", "order_001144", "order_001156", "order_001168", "order_001180", "order_001192", "order_001204", "order_001216", "order_001228", "order_001240", "order_001252", "order_001264", "order_001276", "order_001288", "order_001300", "order_001312", "order_001324", "order_001336", "order_001348", "order_001360", "order_001372", "order_001384", "order_001396", "order_001408", "order_001420", "order_001432", "order_001444", "order_001456", "order_001468", "order_001480", "order_001492", "order_001504", "order_001516", "order_001528", "order_001540", "order_001552", "order_001564", "order_001576", "order_001588", "order_001600", "order_001612", "order_001624", "order_001636", "order_001648", "order_001660", "order_001672", "order_001684", "order_001696", "order_001708", "order_001720", "order_001732", "order_001744", "order_001756", "order_001768", "order_001780", "order_001792", "order_001804", "order_001816", "order_001828", "order_001840", "order_001852", "order_001864", "order_001876", "order_001888", "order_001900", "order_001912", "order_001924", "order_001936", "order_001948", "order_001960", "order_001972", "order_001984", "order_001996", "order_002008", "order_002020", "order_002032", "order_002044", "order_002056", "order_002068", "order_002080", "order_002092", "order_002104", "order_002116", "order_002128", "order_002140", "order_002152", "order_002164", "order_002176", "order_002188", "order_002200", "order_002212", "order_002224", "order_002236", "order_002248", "order_002260", "order_002272", "order_002284", "order_002296", "order_002308", "order_002320", "order_002332", "order_002344", "order_002356", "order_002368", "order_002380", "order_002392", "order_002404", "order_002416", "order_002428", "order_002440", "order_002452", "order_002464", "order_002476", "order_002488", "order_002500", "order_002512", "order_002524", "order_002536", "order_002548", "order_002560", "order_002572", "order_002584", "order_002596", "order_002608", "order_002620", "order_002632", "order_002644", "order_002656", "order_002668", "order_002680", "order_002692", "order_002704", "order_002716", "order_002728", "order_002740", "order_002752", "order_002764", "order_002776", "order_002788", "order_002800", "order_002812", "order_002824", "order_002836", "order_002848", "order_002860", "order_002872", "order_002884", "order_002896", "order_002908", "order_002920", "order_002932", "order_002944", "order_002956", "order_002968", "order_002980", "order_002992", "order_003004", "order_003016", "order_003028", "order_003040", "order_003052", "order_003064", "order_003076", "order_003088", "order_003100", "order_003112", "order_003124", "order_003136", "order_003148", "order_003160", "order_003172", "order_003184", "order_003196", "order_003208", "order_003220", "order_003232", "order_003244", "order_003256", "order_003268", "order_003280", "order_003292", "order_003304", "order_003316", "order_003328", "order_003340", "order_003352", "order_003364", "order_003376", "order_003388", "order_003400", "order_003412", "order_003424", "order_003436", "order_003448", "order_003460", "order_003472", "order_003484", "order_003496", "order_003508", "order_003520", "order_003532", "order_003544", "order_003556", "order_003568", "order_003580", "order_003592", "order_003604", "order_003616", "order_003628", "order_003640", "order_003652", "order_003664", "order_003676", "order_003688", "order_003700", "order_003712", "order_003724", "order_003736", "order_003748", "order_003760", "order_003772", "order_003784", "order_003796", "order_003808", "order_003820", "order_003832", "order_003844", "order_003856", "order_003868", "order_003880", "order_003892", "order_003904", "order_003916", "order_003928", "order_003940", "order_003952", "order_003964", "order_003976", "order_003988", "order_004000", "order_004012", "order_004024", "order_004036", "order_004048", "order_004060", "order_004072", "order_004084", "order_004096", "order_004108", "order_004120", "order_004132", "order_004144", "order_004156", "order_004168", "order_004180", "order_004192", "order_004204", "order_004216", "order_004228", "order_004240", "order_004252", "order_004264", "order_004276", "order_004288", "order_004300", "order_004312", "order_004324", "order_004336", "order_004348", "order_004360", "order_004372", "order_004384", "order_004396", "order_004408", "order_004420", "order_004432", "order_004444", "order_004456", "order_004468", "order_004480", "order_004492", "order_004504", "order_004516", "order_004528", "order_004540", "order_004552", "order_004564", "order_004576", "order_004588", "order_004600", "order_004612", "order_004624", "order_004636", "order_004648", "order_004660", "order_004672", "order_004684", "order_004696", "order_004708", "order_004720", "order_004732", "order_004744", "order_004756", "order_004768", "order_004780", "order_004792", "order_004804", "order_004816", "order_004828", "order_004840", "order_004852", "order_004864", "order_004876", "order_004888", "order_004900", "order_004912", "order_004924", "order_004936", "order_004948", "order_004960", "order_004972", "order_004984", "order_004996"], "sample_basis": "bank credit 6 working days after settlement (8 calendar), window=3 working days", "routed_by_policy": true}, {"reason_code": "settlement_reversed", "signature": "order_000046", "owner": "chargeback_ops", "urgency": "critical", "recommended_action": "Treat as a chargeback. The credit was taken back, so the cash position is overstated until the reversal is booked.", "order_count": 1, "value_at_risk": 13381.5, "material": false, "order_ids": ["order_000046"], "sample_basis": "1 debit(s) totalling 13381.5 quote settlement UTR UTR100046 \u2014 money was credited and then taken back", "routed_by_policy": true}, {"reason_code": "settlement_not_credited", "signature": "all", "owner": "razorpay_support", "urgency": "critical", "recommended_action": "Raise with Razorpay quoting the UTR. A payout was reported and no matching credit exists in the statement.", "order_count": 2, "value_at_risk": 6201.64, "material": false, "order_ids": ["order_000021", "order_000045"], "sample_basis": "settlement UTR UTR100021 has no matching bank credit and no unattributed credit for 2373.24 \u2014 money never arrived", "routed_by_policy": true}, {"reason_code": "attribution_ambiguous", "signature": "order_001997", "owner": "merchant_finance", "urgency": "high", "recommended_action": "Attribute by hand against the remittance advice. A credit arrived that matches this settlement's amount and timing, but it matches another settlement's just as well, so the agent refused to guess which one it belongs to.", "order_count": 1, "value_at_risk": 24329.41, "material": false, "order_ids": ["order_001997"], "sample_basis": "a credit was proposed for settlement UTR101997, but the amount alone cannot distinguish it from other settlements expecting the same total \u2014 attribution refused rather than guessed", "routed_by_policy": true}, {"reason_code": "attribution_ambiguous", "signature": "order_000077", "owner": "merchant_finance", "urgency": "high", "recommended_action": "Attribute by hand against the remittance advice. A credit arrived that matches this settlement's amount and timing, but it matches another settlement's just as well, so the agent refused to guess which one it belongs to.", "order_count": 1, "value_at_risk": 18808.33, "material": false, "order_ids": ["order_000077"], "sample_basis": "a credit was proposed for settlement UTR100077, but the amount alone cannot distinguish it from other settlements expecting the same total \u2014 attribution refused rather than guessed", "routed_by_policy": true}, {"reason_code": "bank_amount_mismatch", "signature": "short_by_250.0", "owner": "razorpay_support", "urgency": "high", "recommended_action": "Reconcile the payout against the credit. The bank moved a different amount from the one the settlement reports.", "order_count": 2, "value_at_risk": 3319.26, "material": false, "order_ids": ["order_000008", "order_000032"], "sample_basis": "bank credited 872.99 vs settlement total 1122.99 (single payment settlement)", "routed_by_policy": true}, {"reason_code": "attribution_ambiguous", "signature": "order_002321", "owner": "merchant_finance", "urgency": "high", "recommended_action": "Attribute by hand against the remittance advice. A credit arrived that matches this settlement's amount and timing, but it matches another settlement's just as well, so the agent refused to guess which one it belongs to.", "order_count": 1, "value_at_risk": 2974.35, "material": false, "order_ids": ["order_002321"], "sample_basis": "a credit was proposed for settlement UTR102321, but the amount alone cannot distinguish it from other settlements expecting the same total \u2014 attribution refused rather than guessed", "routed_by_policy": true}, {"reason_code": "attribution_ambiguous", "signature": "order_000449", "owner": "merchant_finance", "urgency": "high", "recommended_action": "Attribute by hand against the remittance advice. A credit arrived that matches this settlement's amount and timing, but it matches another settlement's just as well, so the agent refused to guess which one it belongs to.", "order_count": 1, "value_at_risk": 2873.49, "material": false, "order_ids": ["order_000449"], "sample_basis": "a credit was proposed for settlement UTR100449, but the amount alone cannot distinguish it from other settlements expecting the same total \u2014 attribution refused rather than guessed", "routed_by_policy": true}, {"reason_code": "credit_unattributed", "signature": "all", "owner": "merchant_finance", "urgency": "medium", "recommended_action": "Attribute the credit by hand. The money is in the account; only the narration is unreadable.", "order_count": 3, "value_at_risk": 43868.63, "material": false, "order_ids": ["order_000009", "order_000023", "order_000033"], "sample_basis": "settlement UTR UTR100009 has no readable bank credit, but 1 unattributed credit(s) match the expected 17616.68 \u2014 narration unreadable, NOT matched on amount", "routed_by_policy": true}, {"reason_code": "ledger_gross_amount_mismatch", "signature": "order_000902", "owner": "merchant_finance", "urgency": "medium", "recommended_action": "Correct the booked amount, or explain the difference. The ledger and the settlement disagree on the sale value.", "order_count": 1, "value_at_risk": 10798.6, "material": false, "order_ids": ["order_000902"], "sample_basis": "ledger=1692.12 vs settlement_gross=11059.6", "routed_by_policy": true}, {"reason_code": "ledger_gross_amount_mismatch", "signature": "order_000020", "owner": "merchant_finance", "urgency": "medium", "recommended_action": "Correct the booked amount, or explain the difference. The ledger and the settlement disagree on the sale value.", "order_count": 1, "value_at_risk": 3474.27, "material": false, "order_ids": ["order_000020"], "sample_basis": "ledger=4308.24 vs settlement_gross=3558.24", "routed_by_policy": true}], "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."}, "throughput": {"wall_clock_ms": 4608.95, "orders": 5000, "bank_rows": 4582, "records_processed": 9582, "records_per_second": 2079.0, "llm_calls": 3, "llm_calls_per_100_orders": 0.06, "stage_ms": {"load_sources": 9.66, "stage_a_ledger_settlement": 136.28, "tier1_narration_regex": 72.48, "tier2_narration_fuzzy": 28.96, "tier3_narration_llm": 3897.37, "stage_b_settlement_bank": 298.22}}, "bank_source_error": null, "exception_count": 2098, "exception_reason_counts": {"duplicate_settlement": 417, "no_settlement_found": 416, "fee_footing_mismatch": 417, "refund_not_reflected": 416, "ledger_gross_amount_mismatch": 2, "bank_amount_mismatch": 3, "bank_credit_delayed": 417, "credit_unattributed": 3, "settlement_not_credited": 2, "settlement_reversed": 1, "attribution_ambiguous": 4}, "unattributed_bank_credits": [{"txn_id": "bnk_000028", "amount": 4582.15, "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100033", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}, {"txn_id": "bnk_000020", "amount": 21669.8, "narration": "CR/ONLINE TRF/paymnt gateway aug batch/no ref quoted", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}, {"txn_id": "bnk_000008", "amount": 17616.68, "narration": "RAZORPAY NET STLMT AUG/DR RVSL REF UTR100001/CR REF UTR100009", "reason_code": "narration_unresolved", "basis": "LLM call failed cleanly, routed to exception: Connection error."}], "audit_trail": {"intact": true, "entries": 10004, "verified": 10004, "unverifiable_prefix": 0, "broken_at": null, "reason": "all 10004 hashed entries verify against the chain"}, "close_gate": {"can_close": false, "blocker_count": 2, "value_blocking_close": 24478519.32, "conditions_checked": 7, "conditions_passed": ["audit_trail_intact", "sources_verifiable", "books_balance", "revenue_recorded", "cash_attributable"], "blockers": [{"condition": "reversals_booked", "why": "1 settlement(s) were credited and then reversed, so the closing cash position is overstated until the reversals are booked.", "action": "Book the chargebacks against the original settlements.", "value_at_risk": 13381.5, "detail": {"order_count": 1}}, {"condition": "material_exceptions_resolved", "why": "5 incident(s) above the triage threshold are still open.", "action": "Work the triage queue, or record a documented decision to accept each one.", "value_at_risk": 24465137.82, "detail": {"incident_count": 5, "threshold": 304262.61}}], "note": "A close decision, not a close. This records what a controller would need to resolve before signing; it signs nothing."}, "source_dir": "generated, 5,000 orders at fixture density", "chain_sample": ["c48a2a4263bfcc54bf52\u2026  \u2190  000000000000\u2026", "b7fbc3fc8c7f49443142\u2026  \u2190  c48a2a4263bf\u2026", "df726237de49684b7688\u2026  \u2190  b7fbc3fc8c7f\u2026"], "scoring": {"injected_faults": 2090, "detected": 2090, "missed": 0, "false_positives": 7, "recall": "100.00%  [99.8\u2013100.0]", "accuracy": "99.82%"}}}}</script>
+<script>
+/* Artifact-only boot: pick a run out of the embedded set and hand it to Desk. */
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("run-data").textContent);
+
+  function show(key) {
+    var run = DATA.runs[key];
+    run.generated_at = DATA.generated_at;
+    Desk.render(run);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll(".switch button"), function (b) {
+    b.addEventListener("click", function () {
+      Array.prototype.forEach.call(document.querySelectorAll(".switch button"), function (o) {
+        o.setAttribute("aria-pressed", o === b ? "true" : "false");
+      });
+      show(b.dataset.batch);
+    });
+  });
+
+  show("realistic");
+})();
+</script>
