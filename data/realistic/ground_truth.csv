@@ -900,9 +900,7 @@ order_000898,matched,"clean order, should reconcile on both legs"
 order_000899,matched,"clean order, should reconcile on both legs"
 order_000900,matched,"clean order, should reconcile on both legs"
 order_000901,matched,"clean order, should reconcile on both legs"
-order_000901,no_ledger_entry,Razorpay settled an order the merchant never booked
 order_000902,matched,"clean order, should reconcile on both legs"
-order_000902,no_ledger_entry,Razorpay settled an order the merchant never booked
 order_000903,matched,"clean order, should reconcile on both legs"
 order_000904,matched,"clean order, should reconcile on both legs"
 order_000905,matched,"clean order, should reconcile on both legs"
@@ -2001,3 +1999,5 @@ order_001997,matched,"clean order, should reconcile on both legs"
 order_001998,refund_not_reflected,Razorpay refunded; merchant ledger still books the full sale
 order_001999,duplicate_settlement,two settlement rows exist for one order_id
 order_002000,no_settlement_found,order never settled (stuck/orphan)
+order_002901,no_ledger_entry,Razorpay settled an order the merchant never booked
+order_002902,no_ledger_entry,Razorpay settled an order the merchant never booked

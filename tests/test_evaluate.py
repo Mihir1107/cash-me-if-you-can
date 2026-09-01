@@ -170,3 +170,19 @@ def test_the_match_rate_carries_no_interval(workspace, monkeypatch):
     assert "match_rate_ci95" not in payload
     assert "recall_ci95" in result["fault_detection"]
     assert "census" in result["fault_detection"]["sample_note"]
+
+
+def test_an_answer_key_naming_one_order_twice_is_refused():
+    """
+    A duplicate order_id means the key has no answer for that order. Zipping it
+    into a dict keeps whichever row came last and scores against it silently,
+    which is how a generator bug survived: two truth rows disagreed about the
+    same order and the run still reported a number.
+    """
+    ambiguous = pd.DataFrame([
+        {"order_id": "order_000001", "expected_reason_code": "matched", "note": ""},
+        {"order_id": "order_000001", "expected_reason_code": "no_ledger_entry",
+         "note": ""},
+    ])
+    with pytest.raises(ValueError, match="more than once"):
+        score(ambiguous, report([]))

@@ -91,3 +91,25 @@ def test_the_controller_is_not_drowned(realistic):
 def test_the_money_identity_holds_at_realistic_density(realistic):
     report, _, _ = realistic
     assert report["money"]["identity"]["holds"]
+
+
+def test_the_unbooked_settlements_are_genuinely_unbooked(realistic):
+    """
+    The unbooked-order numbers are pinned at 901/902, clear of the primary
+    batch's 1..55. At 2,000 orders they are inside the book, so settling them
+    would inject a duplicate settlement for an order the ledger HAS booked while
+    the answer key still claimed no_ledger_entry -- the fixture scoring itself
+    wrong, and the matcher taking the blame. They must move clear of the book.
+    """
+    _, result, truth = realistic
+    unbooked = [row["order_id"] for row in truth
+                if row["expected_reason_code"] == "no_ledger_entry"]
+    assert len(unbooked) == 2
+    assert len(set(unbooked)) == 2
+
+    booked = {row["order_id"] for row in truth
+              if row["expected_reason_code"] != "no_ledger_entry"}
+    assert not (set(unbooked) & booked), "an unbooked order is also in the book"
+
+    per_code = result["per_reason_code"]["no_ledger_entry"]
+    assert per_code["recall"] == 1.0 and per_code["precision"] == 1.0

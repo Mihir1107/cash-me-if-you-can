@@ -67,6 +67,20 @@ def predicted_labels(report):
 
 def score(truth_df, report):
     predicted = predicted_labels(report)
+
+    # An answer key with the same order twice has no answer for that order, and
+    # zipping it into a dict silently keeps whichever row came last. That is how
+    # a generator bug hid: raising N_ORDERS past the pinned unbooked order
+    # numbers settled orders the ledger HAD booked, so two truth rows disagreed
+    # about the same order and the score quietly reported against one of them.
+    # An unusable source is an exception here, exactly as it is in the pipeline.
+    duplicates = truth_df["order_id"][truth_df["order_id"].duplicated()].unique()
+    if len(duplicates):
+        raise ValueError(
+            f"ground truth names {len(duplicates)} order(s) more than once "
+            f"(e.g. {', '.join(map(str, duplicates[:3]))}); the answer key is "
+            f"ambiguous and cannot be scored against")
+
     expected = dict(zip(truth_df["order_id"], truth_df["expected_reason_code"]))
 
     pairs = [(exp, predicted.get(oid, MATCHED)) for oid, exp in expected.items()]
@@ -175,10 +189,12 @@ def print_evaluation(result, ablation_rows):
           f"census and carries no interval)")
     print(f"Exact reason-code accuracy: {result['exact_label_accuracy']:.2%}")
     print("-" * 74)
-    print(f"{'reason_code':<26}{'support':>8}{'prec':>9}{'recall':>9}{'F1':>8}{'FP':>5}{'FN':>5}")
+    # 30 fits the longest code, ledger_gross_amount_mismatch, without pushing
+    # the rest of its row out of alignment.
+    print(f"{'reason_code':<30}{'support':>8}{'prec':>9}{'recall':>9}{'F1':>8}{'FP':>5}{'FN':>5}")
     for code, m in sorted(result["per_reason_code"].items(),
                           key=lambda kv: (-kv[1]["support"], kv[0])):
-        print(f"{code:<26}{m['support']:>8}{m['precision']:>9.2%}"
+        print(f"{code:<30}{m['support']:>8}{m['precision']:>9.2%}"
               f"{m['recall']:>9.2%}{m['f1']:>8.2f}"
               f"{m['false_positives']:>5}{m['false_negatives']:>5}")
 
@@ -186,7 +202,7 @@ def print_evaluation(result, ablation_rows):
         print("-" * 74)
         print("Misclassified orders (every one, no filtering):")
         for m in result["misclassified"]:
-            print(f"  {m['order_id']}  expected={m['expected']:<24} got={m['predicted']}")
+            print(f"  {m['order_id']}  expected={m['expected']:<30} got={m['predicted']}")
 
     print("-" * 74)
     print("TIER ABLATION — what each narration tier is worth on this batch")

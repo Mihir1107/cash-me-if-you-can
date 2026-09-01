@@ -70,7 +70,9 @@ SHORT_PAID_ORDERS = {8, 32}
 LEDGER_MISMATCH_ORDERS = {20}
 SPLIT_CREDIT_ORDERS = {10, 34}
 REVERSED_ORDERS = {46}   # case 10, otherwise clean, not batched
-# order numbers that exist ONLY on Razorpay's side, never in the merchant ledger
+# order numbers that exist ONLY on Razorpay's side, never in the merchant ledger.
+# Pinned well clear of the primary batch's 1..55; see _unbooked_order_numbers()
+# for what happens when a caller raises N_ORDERS past them.
 UNBOOKED_SETTLEMENTS = {901, 902}
 NOT_CREDITED_ORDERS = {21, 45}
 REFUND_REFLECTED_ORDERS = {11, 35}
@@ -86,6 +88,23 @@ for _group in BATCH_GROUPS:
 
 def rid(prefix, n):
     return f"{prefix}_{n:06d}"
+
+
+def _unbooked_order_numbers():
+    """
+    The order numbers to settle without ever booking, resolved against the
+    CURRENT N_ORDERS rather than the primary batch's.
+
+    UNBOOKED_SETTLEMENTS is pinned at 901/902, which is clear of the primary
+    batch's 1..55. Callers that raise N_ORDERS past them -- make_realistic at
+    2,000, benchmark.py at 5,000 -- would otherwise settle an order the ledger
+    HAS booked, which is a duplicate settlement, not an unbooked one. The
+    matcher reads it correctly as `duplicate_settlement` while the answer key
+    still claims `no_ledger_entry`, so the fixture, not the pipeline, is what
+    scores wrong. Moving them clear of the book keeps the injected fault the
+    fault it says it is at every batch size.
+    """
+    return {n if n > N_ORDERS else N_ORDERS + n for n in UNBOOKED_SETTLEMENTS}
 
 
 def make_dataset():
@@ -272,7 +291,7 @@ def make_dataset():
     # Settlements for orders the merchant never booked. Deliberately absent from
     # ledger_rows: that absence is the whole point. They still belong in the
     # answer key, because a reconciliation that cannot see them is worthless.
-    for n in sorted(UNBOOKED_SETTLEMENTS):
+    for n in sorted(_unbooked_order_numbers()):
         order_id = rid("order", n)
         amount = round(random.uniform(4000, 18000), 2)
         fee = round(amount * FEE_PCT, 2)
