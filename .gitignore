@@ -12,6 +12,7 @@ credentials.json
 
 # Python
 .coverage
+.hypothesis/
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -35,6 +36,9 @@ FORM_ANSWERS.md
 PROJECT_BRIEF.md
 
 CLAUDE.md
+
+# Recording props for the demo video, not part of the submission
+demo_files/
 
 # Test-run scratch
 .playwright-mcp/

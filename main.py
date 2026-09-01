@@ -51,8 +51,8 @@ if __name__ == "__main__":
 
     report, _ = run_reconciliation(data_dir=data_dir)
 
-    # Kept behind a flag so a default run still makes exactly two model calls
-    # regardless of batch size, which is a property worth not muddying.
+    # Kept behind a flag so a default run still makes the same three narration
+    # calls regardless of batch size, which is a property worth not muddying.
     if "--brief" in sys.argv and report.get("triage"):
         from src.brief import attach_briefs
 

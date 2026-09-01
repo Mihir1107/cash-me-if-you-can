@@ -267,23 +267,39 @@
     "note": "Recommendations only. Nothing here edits a ledger, posts an entry, or closes an exception."
   },
   "throughput": {
-    "wall_clock_ms": 5335.86,
+    "wall_clock_ms": 4394.9,
     "orders": 57,
     "bank_rows": 50,
     "records_processed": 107,
-    "records_per_second": 20.1,
+    "records_per_second": 24.3,
     "llm_calls": 3,
     "llm_calls_per_100_orders": 5.26,
     "stage_ms": {
-      "load_sources": 1.11,
-      "stage_a_ledger_settlement": 1.53,
-      "tier1_narration_regex": 0.79,
-      "tier2_narration_fuzzy": 0.38,
-      "tier3_narration_llm": 5315.23,
-      "stage_b_settlement_bank": 11.51
+      "load_sources": 1.73,
+      "stage_a_ledger_settlement": 1.72,
+      "tier1_narration_regex": 0.83,
+      "tier2_narration_fuzzy": 0.41,
+      "tier3_narration_llm": 4364.88,
+      "stage_b_settlement_bank": 19.86
     }
   },
   "bank_source_error": null,
+  "source_diagnostics": {
+    "ok": true,
+    "checks": [
+      {
+        "check": "the ledger and the settlement report share order ids",
+        "ok": true,
+        "detail": "96% of the smaller side's order ids appear on both \u2014 near zero usually means one of them is not the order id"
+      },
+      {
+        "check": "bank narrations quote references the settlements carry",
+        "ok": true,
+        "detail": "88% of narrations contain a known reference \u2014 zero can mean the column is not the narration, or that this bank simply does not quote them"
+      }
+    ],
+    "failures": []
+  },
   "exception_count": 33,
   "exception_reason_counts": {
     "no_ledger_entry": 2,
