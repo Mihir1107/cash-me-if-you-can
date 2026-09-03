@@ -505,8 +505,7 @@
     window.scrollTo(0, 0);
   });
 
-  function download(name, text) {
-    var blob = new Blob([text], { type: "application/json" });
+  function saveBlob(name, blob) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
@@ -517,11 +516,46 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 0);
   }
 
+  // The PDF is typeset on the server, from the run this page is already
+  // holding -- posted back rather than re-reconciled, so the document and the
+  // screen can never disagree about a number.
+  function downloadPdf(button, endpoint, name) {
+    if (!lastRun) return;
+    var label = button.textContent;
+    button.disabled = true;
+    button.textContent = "Preparing PDF…";
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lastRun)
+    })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.json().then(function (p) {
+            throw new Error(p.detail || p.title || "the server refused it");
+          });
+        }
+        return r.blob();
+      })
+      .then(function (blob) { saveBlob(name, blob); })
+      .catch(function (err) {
+        showProblem({
+          title: "That PDF could not be produced",
+          detail: String(err.message || err),
+          fix: "The reconciliation itself is unaffected — the result on screen still stands."
+        });
+      })
+      .then(function () {
+        button.disabled = false;
+        button.textContent = label;
+      });
+  }
+
   el("dlReport").addEventListener("click", function () {
-    if (lastRun) download("reconciliation_report.json", JSON.stringify(lastRun.report, null, 2));
+    downloadPdf(this, "/api/report.pdf", "reconciliation_close_pack.pdf");
   });
   el("dlAudit").addEventListener("click", function () {
-    if (lastRun) download("audit_trail.jsonl", lastRun.audit_trail || "");
+    downloadPdf(this, "/api/audit.pdf", "audit_trail.pdf");
   });
 
   readiness();

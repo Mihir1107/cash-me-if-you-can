@@ -14,6 +14,7 @@ a real person's afternoon gets wasted:
 
 import io
 import json
+import re
 import tempfile
 from pathlib import Path
 
@@ -359,3 +360,106 @@ def test_a_holiday_calendar_actually_reaches_the_matcher(client, tmp_path,
     client.post("/api/reconcile", data=data, content_type="multipart/form-data")
 
     assert len(seen["holidays"]) == 1
+
+
+# ------------------------------------------------------------ the PDF exports
+
+def _pdf_text(data):
+    """
+    Everything printable in the PDF's content streams.
+
+    Reportlab writes them ASCII85-encoded over zlib, so both layers come off
+    before anything can be asserted about what the page says.
+    """
+    import base64
+    import zlib
+
+    out = []
+    for body in re.findall(rb"[^d]stream\r?\n(.*?)endstream", data, re.S):
+        try:
+            body = zlib.decompress(base64.a85decode(body.strip(), adobe=True))
+        except Exception:
+            continue
+        # `(some text) Tj` -- the words, without the positioning operators
+        out += re.findall(rb"\((?:[^()\\]|\\.)*\)", body)
+    return " ".join(t[1:-1].decode("latin-1") for t in out)
+
+
+@pytest.fixture
+def a_run(client):
+    r = client.post("/api/reconcile", data=three_good(),
+                    content_type="multipart/form-data")
+    assert r.status_code == 200
+    return r.get_json()
+
+
+def test_the_report_downloads_as_a_pdf(client, a_run):
+    r = client.post("/api/report.pdf", json=a_run)
+    assert r.status_code == 200
+    assert r.mimetype == "application/pdf"
+    assert r.data.startswith(b"%PDF-")
+    assert "reconciliation_close_pack.pdf" in r.headers["Content-Disposition"]
+
+
+def test_the_audit_trail_downloads_as_a_pdf(client, a_run):
+    r = client.post("/api/audit.pdf", json=a_run)
+    assert r.status_code == 200
+    assert r.data.startswith(b"%PDF-")
+    assert "audit_trail.pdf" in r.headers["Content-Disposition"]
+
+
+def test_the_pdf_prints_the_run_s_own_figures(client, a_run):
+    """
+    The document and the screen must never disagree about a number. The PDF is
+    typeset from the payload the page is holding, so the headline figures have
+    to come back out of it unchanged.
+    """
+    text = _pdf_text(client.post("/api/report.pdf", json=a_run).data)
+    report = a_run["report"]
+    assert f"{report['match_rate_pct']}%" in text
+    assert f"{report['money']['at_risk_value']:,.2f}" in text
+    assert ("CLOSE BLOCKED" if not report["close_gate"]["can_close"]
+            else "CLEARED TO CLOSE") in text
+
+
+def test_the_audit_pdf_verifies_the_chain_it_is_printing(client, a_run):
+    """
+    The claim on the page is the document's own finding about the bytes it
+    prints, not a status copied out of the run. Break a hash and it must say so.
+    """
+    text = _pdf_text(client.post("/api/audit.pdf", json=a_run).data)
+    assert "CHAIN INTACT" in text
+
+    lines = a_run["audit_trail"].splitlines()
+    tampered = json.loads(lines[3])
+    tampered["basis"] = "something nobody wrote"
+    lines[3] = json.dumps(tampered)
+    broken = dict(a_run, audit_trail="\n".join(lines) + "\n")
+
+    text = _pdf_text(client.post("/api/audit.pdf", json=broken).data)
+    assert "CHAIN BROKEN" in text
+    assert "CHAIN INTACT" not in text
+
+
+def test_a_pdf_request_with_no_run_is_refused_not_rendered(client):
+    r = client.post("/api/report.pdf", json={})
+    assert r.status_code == 400
+    assert "reconciliation" in r.get_json()["detail"].lower()
+
+
+def test_pdf_rendering_does_not_leave_files_behind(client, a_run, monkeypatch):
+    made = []
+    real = tempfile.mkdtemp
+
+    def watched(*a, **kw):
+        path = real(*a, **kw)
+        made.append(Path(path))
+        return path
+
+    monkeypatch.setattr(webapp.tempfile, "mkdtemp", watched)
+    client.post("/api/report.pdf", json=a_run)
+    client.post("/api/audit.pdf", json=a_run)
+    client.post("/api/audit.pdf", json=a_run)
+    # The directory serving the current response has to outlive it; every
+    # earlier one is gone by the time the next request is answered.
+    assert sum(p.exists() for p in made) <= 1

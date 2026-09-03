@@ -33,7 +33,7 @@ import tempfile
 import traceback
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -50,6 +50,7 @@ import pandas as pd  # noqa: E402
 from src import matcher, schema  # noqa: E402
 from src.evaluate import run_evaluation  # noqa: E402
 from src.reconcile import SourceUnavailable, run_reconciliation  # noqa: E402
+from webapp import pdf_export  # noqa: E402
 
 app = Flask(__name__, template_folder="webapp/templates", static_folder="webapp/static")
 
@@ -318,6 +319,69 @@ def reconcile():
         )
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+@app.post("/api/report.pdf")
+def report_pdf():
+    """
+    The close pack, as paper.
+
+    The page posts back the run it is already holding rather than the server
+    re-reconciling: a second run would produce a second set of numbers, and the
+    document has to be the one on screen. Nothing here computes -- see
+    webapp/pdf_export.py.
+    """
+    return _pdf(pdf_export.build_report_pdf, "reconciliation_close_pack.pdf")
+
+
+@app.post("/api/audit.pdf")
+def audit_pdf():
+    """The hash-chained trail, re-verified against the bytes being printed."""
+    return _pdf(pdf_export.build_audit_pdf, "audit_trail.pdf")
+
+
+def _pdf(builder, filename):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not payload.get("report") and not payload.get("audit_trail"):
+        return _problem(
+            400, "Nothing to put in a PDF",
+            "The download needs the result of a reconciliation run, and none "
+            "was sent with the request.",
+            fix="Run a reconciliation first, then download from the results page.",
+        )
+
+    work = Path(tempfile.mkdtemp())
+    try:
+        path = builder(payload, work / filename)
+        return send_file(path, mimetype="application/pdf",
+                         as_attachment=True, download_name=filename,
+                         max_age=0)
+    except Exception:
+        traceback.print_exc()
+        return _problem(
+            500, "The PDF could not be rendered",
+            "The run itself is fine — this failed while typesetting it.",
+            fix="The JSON download still works, and the traceback is in the "
+                "terminal running this server.",
+        )
+    finally:
+        # send_file has read the bytes by the time Flask returns, but the
+        # directory must outlive the response object, so it is cleaned on the
+        # next request rather than here.
+        app.config.setdefault("_pdf_temp", []).append(work)
+        _sweep_pdf_temp(keep=work)
+
+
+def _sweep_pdf_temp(keep=None):
+    """Delete the previous request's PDF scratch directory."""
+    pending = app.config.get("_pdf_temp") or []
+    remaining = []
+    for path in pending:
+        if path == keep:
+            remaining.append(path)
+        else:
+            shutil.rmtree(path, ignore_errors=True)
+    app.config["_pdf_temp"] = remaining
 
 
 @app.post("/api/sample/<name>")

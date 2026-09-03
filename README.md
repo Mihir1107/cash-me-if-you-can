@@ -296,9 +296,10 @@ python app.py        # then open http://127.0.0.1:5051
 
 Drag in three CSVs — your ledger, the Razorpay settlement report, the bank
 statement — and get back the close decision, the money at risk by reason, and a
-work queue routed to whoever has to fix each thing. Download the report and the
-audit trail from the same screen. There is a **Try it with sample data** button
-if you just want to see it work.
+work queue routed to whoever has to fix each thing. The same screen downloads
+two PDFs: a close pack — verdict, blockers, exposure, the queue — and the full
+hash-chained audit trail, re-verified as it is typeset. There is a **Try it
+with sample data** button if you just want to see it work.
 
 **Your columns do not have to be named ours.** Nobody's export says `ledger_id`.
 A Tally ledger says *Voucher No* and *Party Name*, a settlement report says

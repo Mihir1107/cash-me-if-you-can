@@ -3,6 +3,7 @@ openai>=3.0        # responses.parse + strict structured outputs
 pydantic>=2.0      # the strict schema Tier 3 and the brief guard parse into
 python-dotenv>=1.0 # reads OPENAI_API_KEY from a local .env
 flask>=3.0         # the local web app: three CSVs in, a close decision out
+reportlab>=4.0     # the close pack and audit trail, typeset as PDFs by webapp/pdf_export.py
 pytest>=8.0
 hypothesis>=6.0   # property-based invariant tests
 coverage>=7.0     # line coverage for the suite; no pytest-cov, run it directly
