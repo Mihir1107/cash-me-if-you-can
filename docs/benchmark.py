@@ -1,5 +1,5 @@
 """
-Regenerates the throughput table in README.md.
+Prints the throughput table for README.md, to be pasted in.
 
 The scale figures are the one set of numbers in this project that no committed
 script produced, so they drifted: the false-positive column was measured before

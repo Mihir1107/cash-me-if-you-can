@@ -11,9 +11,16 @@ pip install -r requirements.txt
 python main.py --evaluate        # reconcile, then score against ground truth
 python main.py --prove           # 30 seconds: watch a wrong proposal get refused
 python main.py --alt --evaluate  # same code, a different bank's conventions
-python -m pytest tests/ -q       # 314 tests
+python -m pytest tests/ -q       # 320 tests
 python app.py                    # the app: drop in three CSVs, get a close decision
 ```
+
+If you only read two sections: [the boundary](#read-this-part-first) — what
+happens when a component is wrong — and [what
+broke](#what-broke). Then [results](#results) ·
+[close gate](#can-the-period-be-closed) · [where the AI is](#where-the-ai-is-and-where-it-is-not) ·
+[the app](#the-app) · [throughput](#throughput) · [tests](#tests) ·
+[limits](#limits).
 
 ## Read this part first
 
@@ -50,26 +57,26 @@ there.** Same for a model proposal at 100% confidence, and every level between
 The first version reported **65.45%**. Every fix since has cost points.
 
 **A confidently wrong proposal could still become a match, if the amounts
-collided.** Stage B verifies amount and date, so it catches a wrong proposal
-only when the settlement it names expects a *different* amount. Two settlements
+collided.** Stage B verifies amount and date, so it catches a wrong proposal only
+when the settlement it names expects a *different* amount. Two settlements
 expecting the same amount on the same day defeated it completely: the credit
 passed every check against whichever one it was pointed at, and the other was
-reported as never credited. A confident, fully verified, wrong match, sitting
+reported as never credited — a confident, fully verified, wrong match, sitting
 directly under the claim this project leads with. Found by an external review,
-not by my 183 tests. Proposals from the fuzzy and LLM tiers are now refused when
-more than one uncredited settlement could claim the credit (`attribution_
-ambiguous`); a reference read straight out of the narration is evidence rather
-than a guess and still survives a collision.
+not by my 183 tests. Fuzzy and LLM proposals are now refused when more than one
+uncredited settlement could claim the credit (`attribution_ambiguous`); a
+reference read straight out of the narration is evidence rather than a guess, and
+still survives a collision.
 
-**A blank amount came out `matched`.** `abs(nan - x) > tol` is `False` in
-Python, so NaN defeated every tolerance check in the file. Present since the
-first version, under 60 passing tests, producing exactly what this design exists
-to prevent: a match nobody verified. A blank cell is the most common defect in
-real bank exports. Found by an adversarial case, not a green suite.
+**A blank amount came out `matched`.** `abs(nan - x) > tol` is `False` in Python,
+so NaN defeated every tolerance check in the file. Present since the first
+version, under 60 passing tests, producing exactly what this design exists to
+prevent: a match nobody verified. A blank cell is the most common defect in real
+bank exports. Found by an adversarial case, not a green suite.
 
 **A settlement for an unbooked order vanished entirely.** Stage A iterated the
-ledger, so an order Razorpay settled and the ledger never recorded got no
-verdict. A batch containing one read as 100% reconciled, zero exceptions, while
+ledger, so an order Razorpay settled and the ledger never recorded got no verdict
+at all. A batch containing one read as 100% reconciled, zero exceptions, while
 real money sat unexplained. Silent, and flattering.
 
 **The answer key was wrong at scale, and the matcher took the blame.** The two
@@ -201,12 +208,10 @@ compared against the threshold once. Split per order they would have been small
 change, below threshold twice, and the pattern invisible.
 
 **The threshold is an operational triage heuristic, not audit materiality.**
-Materiality under SA 320 / ISA 320 is a judgement set against an entity
-benchmark (profit before tax, revenue, total assets) and carries qualitative
-overrides, so a small item can still be material by its nature. This is 0.5% of
-the run's own exposure, floored, chosen because it produces a sensible queue at
-this batch size. A real deployment would replace it with a threshold agreed with
-the controller.
+Materiality under SA 320 / ISA 320 is a judgement set against an entity benchmark
+and carries qualitative overrides, so a small item can still be material by its
+nature. A real deployment would replace this with a threshold agreed with the
+controller.
 
 Consequence outranks size. **No model is involved**: routing is a lookup,
 clustering is a signature, priority is arithmetic on money already computed.
@@ -246,11 +251,10 @@ the draft and checks each against the facts the model was given:
 ```
 
 Rounding is rejected too: in a finance document a rounded figure is a different
-figure. So is a currency. The first live run of this feature had the model write
-`$13381.5` for an amount in rupees, and the number guard passed it because the
-digits were right. A brief wrong by an exchange rate is worse than a dull one,
-so the facts state amounts as bare numbers and a brief that names a currency is
-discarded.
+figure. So is a currency. The first live run had the model write `$13381.5` for
+an amount in rupees, and the number guard passed it because the digits were
+right. A brief wrong by an exchange rate is worse than a dull one, so a brief
+naming a currency is discarded.
 
 ### What each tier is worth
 
@@ -265,14 +269,13 @@ language: narrations quoting *two* real references, a reversal and a credit,
 where only the surrounding words decide which is which. Live, it picked the
 credit reference both times and ignored the same reversal reference both times.
 
-A default run makes **three model calls, two of which resolve a reference**. The
-count is the same at 57, 502 and 5,002 orders — but that is a property of this
-fixture, not a guarantee: the generator injects exactly three narrations the
-deterministic tiers cannot recover (two quoting two references, one quoting
-none). Everything that *does* scale, the fuzzy tier absorbs for free — 5
+A default run makes **three model calls, two of which resolve a reference** — the
+same count at 57, 502 and 5,002 orders. That is a property of this fixture, not a
+guarantee: the generator injects exactly three narrations the deterministic tiers
+cannot recover. Everything that *does* scale, the fuzzy tier absorbs for free — 5
 recoveries at 57 orders, 42 at 502, 417 at 5,002, still zero API calls. On real
-data, Tier 3 volume would track how many narrations are genuinely unrecoverable,
-not how many orders there are.
+data, Tier 3 volume tracks how many narrations are genuinely unrecoverable, not
+how many orders there are.
 
 ## Not tuned to its own fixture
 
@@ -296,14 +299,13 @@ python app.py        # then open http://127.0.0.1:5051
 
 Drag in three CSVs — your ledger, the Razorpay settlement report, the bank
 statement — and get back the close decision, the money at risk by reason, and a
-work queue routed to whoever has to fix each thing. The same screen downloads
-two PDFs: a close pack — verdict, blockers, exposure, the queue — and the full
-hash-chained audit trail, re-verified as it is typeset. There is a **Try it
-with sample data** button if you just want to see it work.
+work queue routed to whoever has to fix each thing. The same screen downloads two
+PDFs: a close pack, and the full hash-chained audit trail, re-verified as it is
+typeset. There is a **Try it with sample data** button if you just want to see it
+work.
 
 **Your columns do not have to be named ours.** Nobody's export says `ledger_id`.
-A Tally ledger says *Voucher No* and *Party Name*, a settlement report says
-*Settled Amount* and *UTR Number*, an HDFC statement says *Particulars* and
+A Tally ledger says *Voucher No*, an HDFC statement says *Particulars* and
 *Withdrawal Amt.*. `src/schema.py` maps them: names are normalised to lowercase
 alphanumerics and looked up in a curated alias table, so *Order ID*, *order_id*
 and *OrderID* are one thing. A statement that splits money across *Withdrawal*
@@ -319,6 +321,33 @@ for it. That is the confidently-wrong failure this whole architecture exists to
 prevent, and it is not worth saving two clicks. So unmatched columns go to a
 mapping screen with a ranked suggestion pre-selected, which a person confirms.
 The guess is offered; it is never applied.
+
+Two things about it are load-bearing:
+
+**It computes nothing.** Every route saves the uploads to a temp directory and
+calls the same `run_reconciliation()` that `main.py` calls. There is no second
+implementation of the matching logic in JavaScript and there must never be one —
+three bugs here came from shared logic having a copy that drifted, and the copy
+that must never drift is the one deciding whether money matched.
+
+**Nothing leaves the machine unless you ask it to.** It binds to localhost and
+the uploads are deleted when the request finishes. Two outbound calls are
+possible, both opt-in and both needing a key: Tier 3's narration lookup (one bank
+narration string, no amounts) and the schema tier below (column headers only).
+Each has a checkbox. A merchant's ledger is not something to be casual about.
+
+Text read out of your files is escaped before it is rendered. A ledger can
+arrive by email from anyone, so it is treated as data rather than as markup.
+
+Errors are written for the person holding the file, not the person who wrote the
+parser: a near-miss export comes back as *"your ledger is missing `amount`,
+re-export with that column"*, naming which of the three files and highlighting
+it, rather than a stack trace.
+
+The scorecard is deliberately **absent** on your own data. There is no answer key
+for a real merchant's month — if they knew which rows were wrong they would not
+need this — and a blank scorecard reads as "checked, found nothing". Run a
+sample and it fills in, because the generator recorded what it broke.
 
 ### Tier 3, for schemas
 
@@ -347,78 +376,34 @@ correspondingly weak there — `narration` pointed at a branch-name column and
 `order_id` swapped with `ledger_id` pass every check a single file can make.
 
 **So the three files also get checked against each other**, because they are
-three views of the same money and that is itself a testable claim:
+three views of the same money and that is itself a testable claim. Ledger and
+settlements must share order ids; narrations must quote references the
+settlements carry. A swapped join key or a wrong text column scores 0% on those
+and is refused. Two further guards catch mis-maps that look plausible in
+isolation: a column whose values run at 73x their own step size is a running
+balance, not an amount (a real amount column is ~2x); a `status` whose values are
+100% distinct is a name, not a status. Thresholds sit low on purpose — they catch
+a column aimed at the wrong thing, not anyone's bookkeeping.
 
-```
-ledger and settlements share order ids   ->  a swapped join key gives 0%
-narrations quote references the          ->  a wrong text column gives 0%
-  settlements carry
-```
-
-Plus two guards for mis-maps that look perfectly plausible in isolation:
-
-```
-amount -> Balance      values are 73x their own step size    REFUSED
-                       (a real amount column is ~2x — a running
-                        balance is large and moves in small steps)
-status -> Party Name   100% of values are distinct           REFUSED
-                       (a status repeats itself; a name does not)
-```
-
-Thresholds sit low on purpose. They exist to catch a column aimed at the wrong
-thing, not to grade anyone's bookkeeping — a genuinely messy month clears them,
-a mis-mapped join key does not.
-
-Back to the settlements case, because it hides the subtlest failure of the lot:
-the footing identity **cannot see** a fee/tax swap —
-`settled = gross − fee − tax` is symmetric in fee and tax, so every row still
-foots perfectly. What separates them is domain, not arithmetic: GST is charged
-*on* the commission, so tax is a fraction of fee and always the smaller. Stated
-as the assumption it is; a gateway that taxed differently would trip this
-honestly and go to a human.
+The subtlest failure of the lot is one the footing identity **cannot see**:
+`settled = gross − fee − tax` is symmetric in fee and tax, so a fee/tax swap
+still foots perfectly on every row. What separates them is domain, not
+arithmetic — GST is charged *on* the commission, so tax is a fraction of fee and
+always the smaller. Stated as the assumption it is; a gateway that taxed
+differently would trip this honestly and go to a human.
 
 Measured on headers the alias table places **0 of 10** of (`Payout Batch Ref`,
-`Captured Value`, `Remitted To Bank`, `Levy On Charge`…), six live runs:
+`Captured Value`, `Remitted To Bank`, `Levy On Charge`…), six live runs: 3
+accepted with every column correct, 3 refused to the mapping screen, **0 accepted
+but wrong**. Non-deterministic in *coverage*, never in *correctness* — the same
+file can need the mapping screen on one run and not the next, which is a real
+wart; what it cannot do is quietly get a column wrong.
 
-```
-3 accepted — every column correct
-3 refused  — fell back to the mapping screen
-0 accepted but wrong
-```
-
-Non-deterministic in **coverage**, never in **correctness**. The same file can
-need the mapping screen on one run and not the next, which is a real wart; what
-it cannot do is quietly get a column wrong.
-
-**It is off by default**, and it is the one thing on that page that leaves your
-machine. Only **column headers** are sent — no rows, no amounts, no customer
-names, no narrations — because a header is the one part of a finance export that
-carries no financial data. The verification runs locally. With no key, or the box
-unticked, the alias table and the mapping screen carry it exactly as before.
-
-Two things about it are load-bearing:
-
-**It computes nothing.** Every route saves the uploads to a temp directory and
-calls the same `run_reconciliation()` that `main.py` calls. There is no second
-implementation of the matching logic in JavaScript and there must never be one —
-three bugs here came from shared logic having a copy that drifted, and the copy
-that must never drift is the one deciding whether money matched.
-
-**Nothing leaves the machine.** It binds to localhost, the uploads are deleted
-when the request finishes, and the only outbound call the process can make is
-Tier 3's narration lookup — one bank narration string, no amounts, and only if a
-key is configured. There is a checkbox to turn it off. A merchant's ledger is
-not something to be casual about.
-
-Errors are written for the person holding the file, not the person who wrote the
-parser: a near-miss export comes back as *"your ledger is missing `amount`,
-re-export with that column"*, naming which of the three files and highlighting
-it, rather than a stack trace.
-
-The scorecard is deliberately **absent** on your own data. There is no answer key
-for a real merchant's month — if they knew which rows were wrong they would not
-need this — and a blank scorecard reads as "checked, found nothing". Run a
-sample and it fills in, because the generator recorded what it broke.
+**It is off by default.** Only **column headers** are sent — no rows, no
+amounts, no customer names, no narrations — because a header is the one part of
+a finance export that carries no financial data. The verification runs locally.
+With no key, or the box unticked, the alias table and the mapping screen carry
+it exactly as before.
 
 ### A captured run, for people who won't install anything
 
@@ -427,9 +412,8 @@ python data/make_realistic.py      # a 2,000-order month at ~3% faults
 python docs/build_dashboard.py     # -> docs/close-desk.html, self-contained
 ```
 
-Same design, same render code, no server — a single HTML file with three runs
-baked in, for a README link or a judge who is not going to clone a repo. It
-carries three runs of the same code and switches between them:
+Same design, same render code, no server — a single HTML file carrying three runs
+of the same code, for anyone not going to clone a repo:
 
 | | orders | fault density | match rate | incidents | close gate |
 |---|---|---|---|---|---|
@@ -456,10 +440,10 @@ generator is seeded, so every column but the timings reproduces exactly.
 
 With Tier 3 on, the same batch takes seconds rather than milliseconds: 4,394.9 ms
 in the committed sample run, of which 4,364.9 ms is three API calls and 25 ms is
-the deterministic pipeline. The deterministic part is the stable number. API
-latency is not — it moved between 3.8 and 5.3 seconds across runs of the same
-three calls, which is the honest reason cost and latency here scale with
-unrecoverable narrations rather than with orders.
+the deterministic pipeline. The deterministic part is the stable number; API
+latency moved between 3.8 and 5.3 seconds across runs of the same three calls.
+That is why cost and latency here scale with unrecoverable narrations rather than
+with orders.
 
 **Detection holds at every scale. Precision drifts, and the reason is the
 ambiguity filter.** At 5,002 orders, 4 of those 7 false positives are
@@ -467,50 +451,42 @@ ambiguity filter.** At 5,002 orders, 4 of those 7 false positives are
 the more often two of them expect the same amount, and the filter refuses rather
 than guesses.
 
-Refusing on amount alone was too blunt: it cost 20 healthy orders at 5,002, and
-16 of those had only one settlement the credit could actually have come from. So
-a rival has to be a *real* rival — the credit must be date-feasible against it
-too, which is the same window Stage B enforces anyway, asked earlier. A payout
-made three weeks ago was never competing for today's credit. That is narrowing
-*who is competing*, never picking between competitors: two settlements that are
-both feasible are still refused, at any confidence. 20 false refusals became 4.
+Refusing on amount alone was too blunt — it cost 20 healthy orders at 5,002, and
+16 of those had only one settlement the credit could have come from. So a rival
+has to be a *real* rival: the credit must be date-feasible against it too, which
+is the same window Stage B enforces anyway, asked earlier. That narrows *who is
+competing*, never picks between competitors — two settlements that are both
+feasible are still refused, at any confidence. 20 false refusals became 4.
 
-It fires zero times at 57 and 502 orders. That is the cost of the
-guarantee, and it is a real cost — it turns clean orders into manual work as the
-book grows. At this fault density it stays small, 4 orders in 5,002, but it is
-the number to watch on a book with more outstanding settlements than this one.
+The filter fires zero times at 57 and 502 orders. It is the cost of the
+guarantee, and a real cost: it turns clean orders into manual work as the book
+grows, and nothing currently bounds that rate.
 
 ## Tests
 
-314 tests, 96% line coverage of `src/`.
+320 tests, 96% line coverage of `src/`.
 
 | File | What it holds |
 |---|---|
 | `test_wrong_proposals.py` | upstream tiers being confidently wrong, including the equal-amount collision and its control case |
 | `test_stress.py` | 31 adversarial cases written to break the pipeline |
 | `test_properties.py` | invariants over hypothesis-generated batches |
-| `test_generalize.py` | the alt-convention run, as a regression |
-| `test_brief.py` | the fabrication guard, numbers and currency |
-| `test_output.py` | the printed summary, including degraded shapes |
-| `test_audit.py` | the hash chain under tampering, attacked directly rather than sideways — including two attacks it does **not** catch |
-| `test_close_gate.py` | each of the seven conditions, in both the blocking and the passing state, and what must deliberately not block |
+| `test_audit.py` | the hash chain under tampering, attacked directly — including two attacks it does **not** catch |
+| `test_close_gate.py` | each of the seven conditions, blocking and passing, and what must deliberately not block |
 | `test_realistic_density.py` | the same code at ~3% fault density, not the fixture's ~56% |
-| `test_webapp.py` | the app's own edges: real-world headers, uploads not outliving the request, a holiday calendar not leaking into the next run |
-| `test_schema.py` | column resolution, and what it refuses to place |
-| `test_schema_llm.py` | a confidently wrong schema proposal, caught by verifying it against the file |
+| `test_schema.py`, `test_schema_llm.py` | column resolution, what it refuses to place, and a confidently wrong schema proposal caught against the file |
+| `test_webapp.py` | the app's edges: real-world headers, uploads not outliving the request, a holiday calendar not leaking into the next run |
 | `test_evaluate.py` | the scorer itself, including an answer key that names one order twice |
+| `test_generalize.py`, `test_brief.py`, `test_output.py` | the alt-convention run, the fabrication guard, the printed summary |
 | `test_matcher.py`, `test_reconcile.py`, `test_resolvers.py`, `test_triage.py` | the stage, orchestration, tier and routing logic underneath all of it |
 
 The load-bearing property: *a match always has bank confirmation*, asserted over
 arbitrary generated input rather than the batch I happened to write.
 
-Coverage is close to even: `close_gate` 100%, `fuzzy_resolver` 100%, `audit`
-99%, `matcher` 98%. The thinnest are `schema_llm` at 81% and `reconcile` at 91%,
-and what is uncovered in them is the live API-call path, the `except
-ImportError` fallback for the openai import, and source-degradation branches —
-not logic that decides a verdict. The two files carrying the project's honesty
-claims, `audit` and `close_gate`, were the weakest here until they got test
-modules of their own.
+Coverage is close to even: `close_gate` 100%, `fuzzy_resolver` 100%, `audit` 99%,
+`matcher` 98%. The thinnest are `schema_llm` at 81% and `reconcile` at 91%, and
+what is uncovered in them is the live API-call path and source-degradation
+branches — not logic that decides a verdict.
 
 ## Layout
 
@@ -518,25 +494,21 @@ modules of their own.
 src/matcher.py           Stage A + Stage B, fully deterministic
 src/fuzzy_resolver.py    Tier 2, string recovery, zero LLM calls
 src/llm_resolver.py      Tier 3, the model proposes, never confirms
+src/schema.py            their column names onto ours, by table not by guess
+src/schema_llm.py        tier 3 for schemas: propose a mapping, then verify it
 src/money.py             value reconciliation + the accounting identity
 src/triage.py            incident clustering, routing, triage threshold
 src/close_gate.py        the period close decision
-src/brief.py             model phrases, deterministic code verifies
 src/audit.py             append-only, hash-chained decision log
+src/brief.py             model phrases, deterministic code verifies
 src/prove.py             the live boundary demonstration
 src/evaluate.py          ground-truth scoring, Wilson intervals, ablation
 src/reconcile.py         orchestrator, tier order, source degradation
 src/report.py            three-way match rate, exception list
-src/schema.py            their column names onto ours, by table not by guess
-src/schema_llm.py        tier 3 for schemas: propose a mapping, then verify it
-data/                    both batches + the ground-truth answer key
-app.py                   the local web app: three CSVs in, a close decision out
-webapp/static/desk.css   the close desk design system, one copy
-webapp/static/desk.js    the render logic, one copy, shared by app and artifact
-webapp/static/upload.js  the intake screen: files in, report to Desk.render
-docs/build_dashboard.py  bakes a captured run into one self-contained HTML file
-data/make_realistic.py   a 2,000-order month at a density a merchant would know
-tests/                   314 tests
+app.py + webapp/         the local web app; desk.js renders, it never computes
+data/                    three batches + the ground-truth answer keys
+docs/                    a captured run, the benchmark, the standalone dashboard
+tests/                   320 tests
 ```
 
 A committed sample run is in [`docs/`](docs/), generated by
@@ -544,11 +516,10 @@ A committed sample run is in [`docs/`](docs/), generated by
 by `docs/benchmark.py`. Both write the numbers this README quotes, so a figure
 here that disagrees with the code is a script away from being caught.
 
-`docs/audit_trail_sample.jsonl` is an excerpt of one run's trail, sampled for a
-spread of decision shapes. It deliberately does not verify as a hash chain —
-non-consecutive entries are exactly what `verify_chain()` rejects. The full
-trail it came from verifies, which is what `audit_trail_intact` reports in the
-close gate above.
+`docs/audit_trail_sample.jsonl` is a *sampled* excerpt, so it deliberately does
+not verify as a hash chain — non-consecutive entries are exactly what
+`verify_chain()` rejects. The full trail it came from verifies, which is what
+`audit_trail_intact` reports in the close gate above.
 
 ## Limits
 
@@ -558,11 +529,13 @@ close gate above.
 - The hash chain is tamper-evident, not tamper-proof. Anyone who can rewrite the
   file can recompute the chain. It proves the log was not quietly adjusted
   between the run and the review, which is what an auditor asks.
+- The web app escapes file contents before rendering and keeps uploads local, but
+  it has no authentication. It is a single-user local tool, and binding it to
+  anything but loopback would need a login and TLS in front of it.
 - `credit_unattributed` cannot distinguish "money never arrived" from "money
-  arrived and we could not attribute it" beyond an amount heuristic. Amount
-  equality is weak evidence of identity; neither state becomes a match, but the
-  two exceptions can be labelled the wrong way round. This is the only source of
-  false positives on the 57-order batch, at both key states.
+  arrived and we could not attribute it" beyond an amount heuristic. Neither
+  state becomes a match, but the two exceptions can be labelled the wrong way
+  round. This is the only source of false positives on the 57-order batch.
 - **The ambiguity filter's cost grows with the book.** It never creates a false
   match, but it refuses healthy attributions at a rate that rises with how many
   settlements are outstanding — zero at 57 and 502 orders, 4 at 5,002 — and
