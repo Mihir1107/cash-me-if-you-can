@@ -16,6 +16,22 @@
   var words = function (s) { return String(s).replace(/_/g, " "); };
   var el = function (id) { return document.getElementById(id); };
 
+  /* Everything rendered below is read out of somebody's CSV -- order ids,
+     column headers, the narration quoted back in a basis string. It is data,
+     never markup, and it reaches innerHTML by concatenation, so it is escaped
+     at the sink. A ledger is not a trusted document: it can arrive by email
+     from anyone, and a cell containing a script tag would otherwise run here
+     with same-origin access to every later run in this tab. */
+  var esc = function (s) {
+    return String(s === null || s === undefined ? "" : s).replace(
+      /[&<>"']/g,
+      function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;",
+                 '"': "&quot;", "'": "&#39;" }[c];
+      });
+  };
+
+
   /* Two hosts render this markup and they do not carry identical furniture --
      the static artifact has a batch switcher and a clock in its masthead, the
      live tool has file names and a download row. So optional text is set
@@ -52,7 +68,7 @@
       var b = byName[name];
       return '<div class="cond ' + (b ? "fail" : "pass") + '">'
         + '<span class="cond-mark">' + (b ? "✕" : "✓") + "</span>"
-        + '<span class="cond-name">' + name + "</span>"
+        + '<span class="cond-name">' + esc(name) + "</span>"
         + '<span class="cond-val">' + (b ? money(b.value_at_risk) : "") + "</span>"
         + "</div>";
     }).join("");
@@ -98,28 +114,28 @@
       var rows = groups[owner].map(function (inc, i) {
         var cls = inc.material ? inc.urgency : "sub";
         var ids = (inc.order_ids || []).slice(0, 14)
-          .map(function (x) { return "<code>" + x + "</code>"; }).join("");
+          .map(function (x) { return "<code>" + esc(x) + "</code>"; }).join("");
         var more = (inc.order_ids || []).length > 14
           ? '<code>+' + ((inc.order_ids.length) - 14) + " more</code>" : "";
         return '<div class="item ' + cls + '" data-key="' + owner + "-" + i + '">'
           + '<div class="stripe"></div><div>'
           + '<button class="item-btn" type="button" aria-expanded="false">'
-          + '<span class="item-title">' + words(inc.reason_code) + "</span>"
+          + '<span class="item-title">' + esc(words(inc.reason_code)) + "</span>"
           + '<span class="item-val">' + money(inc.value_at_risk) + "</span>"
           + '<span class="item-sub">'
-          + '<span class="pill ' + inc.urgency + '">' + inc.urgency + "</span>"
+          + '<span class="pill ' + esc(inc.urgency) + '">' + esc(inc.urgency) + "</span>"
           + (inc.material ? "" : '<span class="pill below">below threshold</span>')
           + "<span>" + inc.order_count + (inc.order_count === 1 ? " order" : " orders") + "</span>"
           + "</span></button>"
           + '<div class="item-body">'
-          + '<p class="action">' + inc.recommended_action + "</p>"
-          + '<p class="basis">' + (inc.sample_basis || "") + "</p>"
+          + '<p class="action">' + esc(inc.recommended_action) + "</p>"
+          + '<p class="basis">' + esc(inc.sample_basis || "") + "</p>"
           + '<div class="orders">' + ids + more + "</div>"
           + "</div></div></div>";
       }).join("");
 
       return '<div class="owner-group"><div class="owner-bar">'
-        + '<span class="owner-name">' + words(owner) + "</span>"
+        + '<span class="owner-name">' + esc(words(owner)) + "</span>"
         + '<span class="owner-meta">' + o.incidents + " incidents · " + o.orders
         + " orders · " + money(o.value_at_risk) + "</span></div>" + rows + "</div>";
     }).join("");
@@ -161,7 +177,7 @@
     var flag = { settlement_reversed: "reversed", no_ledger_entry: "unbooked", bank_credit_delayed: "delayed" };
     el("bars").innerHTML = keys.map(function (k) {
       return '<div class="bar-row ' + (flag[k] || "") + '">'
-        + '<span class="lbl">' + words(k) + "</span>"
+        + '<span class="lbl">' + esc(words(k)) + "</span>"
         + '<span class="amt">' + money(risk[k]) + "</span>"
         + '<span class="bar-track"><span class="bar-fill" style="width:'
         + Math.max(1, (risk[k] / top) * 100) + '%"></span></span></div>';
@@ -175,7 +191,7 @@
       + '<div class="kv" style="margin-top:10px"><span class="k">Entries verified</span>'
       + '<span class="v">' + (a.verified || 0).toLocaleString("en-IN") + "</span></div>"
       + '<div class="hashes">' + (d.chain_sample || []).map(function (h) {
-          return "<span>" + h + "</span>";
+          return "<span>" + esc(h) + "</span>";
         }).join("") + "</div>";
 
     /* ----------------------------------------------------------- the model */

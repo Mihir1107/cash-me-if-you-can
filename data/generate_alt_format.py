@@ -143,7 +143,10 @@ def make_dataset():
 
 def write_csv(path, rows, fieldnames):
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
+        # lineterminator is explicit because csv defaults to CRLF, while
+        # .gitattributes normalises to LF on commit -- so every regeneration
+        # showed seven files as modified with byte-identical content.
+        w = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
 

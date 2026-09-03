@@ -8,6 +8,22 @@
 (function () {
   "use strict";
 
+  /* Everything rendered below is read out of somebody's CSV -- order ids,
+     column headers, the narration quoted back in a basis string. It is data,
+     never markup, and it reaches innerHTML by concatenation, so it is escaped
+     at the sink. A ledger is not a trusted document: it can arrive by email
+     from anyone, and a cell containing a script tag would otherwise run here
+     with same-origin access to every later run in this tab. */
+  var esc = function (s) {
+    return String(s === null || s === undefined ? "" : s).replace(
+      /[&<>"']/g,
+      function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;",
+                 '"': "&quot;", "'": "&#39;" }[c];
+      });
+  };
+
+
   var SLOTS = ["ledger", "settlements", "bank"];
   var picked = {};
   var lastRun = null;
@@ -238,14 +254,14 @@
 
   function showProblem(payload) {
     var box = el("problem");
-    var html = "<h3>" + (payload.title || "That didn't work") + "</h3>";
-    html += "<p>" + (payload.detail || "") + "</p>";
+    var html = "<h3>" + esc(payload.title || "That didn't work") + "</h3>";
+    html += "<p>" + esc(payload.detail || "") + "</p>";
     if (payload.missing_columns && payload.missing_columns.length) {
       html += "<p>Missing column(s): " + payload.missing_columns.map(function (c) {
-        return "<code>" + c + "</code>";
+        return "<code>" + esc(c) + "</code>";
       }).join(" ") + "</p>";
     }
-    if (payload.fix) html += '<p class="fix">' + payload.fix + "</p>";
+    if (payload.fix) html += '<p class="fix">' + esc(payload.fix) + "</p>";
     box.innerHTML = html;
     box.classList.remove("hidden");
     if (payload.slot) {
@@ -362,9 +378,9 @@
       box.className = "map-file";
 
       var head = document.createElement("header");
-      head.innerHTML = "<div><h3>" + info.label.replace(/^./, function (c) {
+      head.innerHTML = "<div><h3>" + esc(info.label).replace(/^./, function (c) {
         return c.toUpperCase();
-      }) + '</h3><div class="fname">' + info.filename + "</div></div>"
+      }) + '</h3><div class="fname">' + esc(info.filename) + "</div></div>"
         + '<span class="state ' + (need.length ? "todo" : "ok") + '">'
         + (need.length ? need.length + " to choose" : "all recognised") + "</span>";
       box.appendChild(head);
@@ -373,7 +389,8 @@
         var note = document.createElement("div");
         note.className = "map-note";
         note.innerHTML = "This statement keeps money in two columns — <code>"
-          + info.split_amount.debit + "</code> and <code>" + info.split_amount.credit
+          + esc(info.split_amount.debit) + "</code> and <code>"
+          + esc(info.split_amount.credit)
           + "</code>. They will be combined into one amount, and the direction kept, "
           + "so a reversal is still recognised as one.";
         box.appendChild(note);
@@ -388,13 +405,13 @@
 
         var label = document.createElement("div");
         label.className = "field";
-        label.innerHTML = u.field + (u.required ? '<span class="req">*</span>' : "");
+        label.innerHTML = esc(u.field) + (u.required ? '<span class="req">*</span>' : "");
         row.appendChild(label);
 
         var select = document.createElement("select");
         select.innerHTML = '<option value="">— not in this file —</option>'
           + info.columns.map(function (c) {
-              return '<option value="' + c.replace(/"/g, "&quot;") + '">' + c + "</option>";
+              return '<option value="' + esc(c) + '">' + esc(c) + "</option>";
             }).join("");
         if (u.suggestion) select.value = u.suggestion;
         if (u.required && !select.value) select.classList.add("unset");
@@ -418,7 +435,7 @@
         hint.className = "hint";
         if (u.suggestion) {
           hint.innerHTML = (u.from_model ? "Model's reading: <b>" : "Best guess: <b>")
-            + u.suggestion + "</b>. Change it if that is wrong.";
+            + esc(u.suggestion) + "</b>. Change it if that is wrong.";
         } else if (u.note) {
           hint.textContent = u.note;
         } else {
