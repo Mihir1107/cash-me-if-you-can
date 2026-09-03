@@ -2,8 +2,7 @@
 
 **Razorpay AI Buildathon, Track 04 (AI Finance Controller)**
 
-📺 **[Five-minute pitch video](https://www.youtube.com/watch?v=hiMcqgQ9SFU)** — the
-boundary demonstrated live at 1:00, where a 94%-confident proposal is refused.
+📺 **[Watch the pitch video](https://www.youtube.com/watch?v=hiMcqgQ9SFU)** (5 min)
 
 Reconciles a merchant's ledger against Razorpay settlements against the bank
 statement, across 57 orders. Reports a match rate, the money at risk, a routed
