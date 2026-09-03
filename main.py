@@ -42,7 +42,15 @@ if __name__ == "__main__":
     if "--data" in sys.argv:
         # An explicit directory wins over --alt; the two together is a typo, not
         # a request, and silently honouring one of them hides it.
-        data_dir = sys.argv[sys.argv.index("--data") + 1]
+        try:
+            data_dir = sys.argv[sys.argv.index("--data") + 1]
+        except IndexError:
+            # `--data` with nothing after it is a typo, and falling back to the
+            # default batch would run happily against data the user did not ask
+            # for -- the one outcome worse than stopping.
+            sys.exit("--data needs a directory, e.g. --data data/realistic")
+        if data_dir.startswith("--"):
+            sys.exit(f"--data needs a directory, got the flag {data_dir!r}")
         alt = False
         print(f"Running against {data_dir} — no code changes.\n")
     if alt:

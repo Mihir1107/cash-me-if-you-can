@@ -2,8 +2,24 @@ pandas>=2.0
 openai>=3.0        # responses.parse + strict structured outputs
 pydantic>=2.0      # the strict schema Tier 3 and the brief guard parse into
 python-dotenv>=1.0 # reads OPENAI_API_KEY from a local .env
-flask>=3.0         # the local web app: three CSVs in, a close decision out
+flask>=3.1.3       # the local web app: three CSVs in, a close decision out
+                   # 3.1.3 is a floor, not a preference: CVE-2026-27205 (a
+                   # missing Vary: Cookie) affects <=3.1.2. This app keeps no
+                   # session, so it is not exploitable here -- the floor is
+                   # there so nobody installs a flagged Flask on our say-so.
 reportlab>=4.0     # the close pack and audit trail, typeset as PDFs by webapp/pdf_export.py
 pytest>=8.0
 hypothesis>=6.0   # property-based invariant tests
 coverage>=7.0     # line coverage for the suite; no pytest-cov, run it directly
+
+# Tested against exactly these, on Python 3.14.5. Every figure in
+# README.md came from this set, and the 320 tests pass on it.
+#   pandas==3.0.5
+#   openai==3.3.1
+#   pydantic==2.13.4
+#   python-dotenv==1.2.3
+#   flask==3.1.3
+#   reportlab==5.0.1
+#   pytest==9.1.1
+#   hypothesis==6.165.10
+#   coverage==7.15.4

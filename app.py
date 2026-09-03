@@ -17,14 +17,17 @@ of the matching logic in JavaScript, and there must never be one: three bugs in
 this project came from shared logic having a copy that drifted, and the copy
 that must never drift is the one deciding whether money matched.
 
-**Nothing leaves the machine.** It binds to 127.0.0.1, uploads go to a temp
-directory that is deleted when the request finishes, and the only outbound call
-the process can make is Tier 3's narration lookup -- which sends one bank
-narration string and no amounts, and only if a key is configured. A finance
-person's ledger is not something to be casual about, so the default is local and
-the option to turn the model off is on the page.
+**Nothing leaves the machine unless you ask it to.** It binds to 127.0.0.1 and
+uploads go to a temp directory that is deleted when the request finishes. Two
+outbound calls are possible, both opt-in and both needing a key: Tier 3's
+narration lookup (one bank narration string, no amounts) and the schema tier
+(column headers only -- no rows, no amounts). Neither happens without a key, and
+each has a checkbox. Note that `--brief` does send amounts and order ids, but it
+is CLI-only and no route here reaches it. A finance person's ledger is not
+something to be casual about, so the default is local.
 """
 
+import atexit
 import json
 import os
 import shutil
@@ -238,8 +241,13 @@ def inspect():
             # here it only pre-fills the mapping screen, which a human confirms.
             from src import schema_llm
 
+            # Deliberately NOT upload.filename. An export is usually named after
+            # the merchant ("AcmeCorp_ledger_Aug.csv"), so sending it would put a
+            # customer name in the payload -- the one thing the checkbox copy
+            # promises it does not do. It is also user-controlled text going
+            # into a prompt. The slot says everything the model needs.
             proposal = schema_llm.propose_mapping(
-                head.columns, slot, filename=upload.filename)
+                head.columns, slot, filename=f"{slot} export")
             for u in found["unresolved"]:
                 guess = proposal["mapping"].get(u["field"])
                 if guess and guess in found["columns"]:
@@ -384,6 +392,14 @@ def _sweep_pdf_temp(keep=None):
     app.config["_pdf_temp"] = remaining
 
 
+# The sweep above runs on the NEXT request, so without this the last PDF a
+# session produced -- a close pack, every figure in it -- outlives the server
+# and sits in the temp dir until the machine is rebooted. Downloading a pack and
+# then stopping the server is the normal way to finish, so that is the common
+# case, not the edge one.
+atexit.register(_sweep_pdf_temp)
+
+
 @app.post("/api/sample/<name>")
 def sample(name):
     path = SAMPLES.get(name)
@@ -408,7 +424,17 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "5051"))
 
     print(f"\n  Close desk running at http://{host}:{port}")
-    print("  Files stay on this machine. Ctrl-C to stop.\n")
+    # The banner is a promise, so it has to track what actually happened. On a
+    # non-loopback bind this is an unauthenticated service that accepts a
+    # merchant's ledger and hands back their full reconciled position, and
+    # printing "files stay on this machine" over that would be a lie.
+    if host in ("127.0.0.1", "localhost", "::1"):
+        print("  Files stay on this machine. Ctrl-C to stop.\n")
+    else:
+        print(f"  WARNING: bound to {host}, not loopback. There is no login and")
+        print("  no TLS, so anyone who can reach this port can upload a ledger")
+        print("  and read the result. Use 127.0.0.1 unless you have put your")
+        print("  own authentication in front of it. Ctrl-C to stop.\n")
     try:
         app.run(host=host, port=port, debug=False)
     except OSError as e:
